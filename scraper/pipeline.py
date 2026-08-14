@@ -57,7 +57,11 @@ def depuis_cache(categories: list[int] | None = None,
 
     for categorie_id in categories:
         libelle = config.CATEGORIES.get(categorie_id, str(categorie_id))
-        fichiers = sorted(cache.glob(f"cat{categorie_id}_t{taille_page}_p*.json"))
+        # Toutes les tailles de page confondues : quand une page est refusée
+        # par le contrôle anti-robot, la même plage de lots peut avoir été
+        # récupérée avec un autre découpage. Le dédoublonnage se fait sur
+        # l'identifiant de lot, juste en dessous.
+        fichiers = sorted(cache.glob(f"cat{categorie_id}_t*_p*.json"))
         avant = len(faits)
         for fichier in fichiers:
             items = _lire_cache(fichier) or []
