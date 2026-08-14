@@ -12,6 +12,7 @@ reprenable* plutôt que rapide :
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import random
@@ -26,8 +27,23 @@ from .normalize import normalize_lot
 log = logging.getLogger(__name__)
 
 
-def _fichier_page(cache: Path, categorie_id: int, taille: int, page: int) -> Path:
-    return cache / f"cat{categorie_id}_t{taille}_p{page:04d}.json"
+def empreinte_statuts(statuts) -> str:
+    """Signature courte d'un jeu de statuts, pour ne pas mélanger les caches."""
+    return hashlib.sha1(",".join(sorted(str(s) for s in statuts))
+                        .encode()).hexdigest()[:6]
+
+
+def _fichier_page(cache: Path, categorie_id: int, taille: int, page: int,
+                  statuts=None) -> Path:
+    """Chemin de cache d'une page.
+
+    Le jeu de statuts entre dans le nom : demander « ventes à venir » ne doit
+    pas relire le cache de « ventes clôturées ».
+    """
+    if statuts is None:
+        return cache / f"cat{categorie_id}_t{taille}_p{page:04d}.json"
+    return (cache / f"cat{categorie_id}_s{empreinte_statuts(statuts)}"
+                    f"_t{taille}_p{page:04d}.json")
 
 
 def _lire_cache(chemin: Path) -> list | None:
@@ -61,7 +77,7 @@ def depuis_cache(categories: list[int] | None = None,
         # par le contrôle anti-robot, la même plage de lots peut avoir été
         # récupérée avec un autre découpage. Le dédoublonnage se fait sur
         # l'identifiant de lot, juste en dessous.
-        fichiers = sorted(cache.glob(f"cat{categorie_id}_t*_p*.json"))
+        fichiers = sorted(cache.glob(f"cat{categorie_id}_*p[0-9]*.json"))
         avant = len(faits)
         for fichier in fichiers:
             items = _lire_cache(fichier) or []
@@ -150,7 +166,7 @@ def collecter(categories: list[int] | None = None,
         page = 1
 
         while page <= max_pages:
-            chemin = _fichier_page(cache, categorie_id, taille_page, page)
+            chemin = _fichier_page(cache, categorie_id, taille_page, page, statuts)
             items = _lire_cache(chemin) if chemin.exists() else None
 
             if items is not None:
@@ -218,7 +234,8 @@ def collecter(categories: list[int] | None = None,
                                                    numero, taille_page)
                     rapport["appels_api"] += 1
                     items = produits.get("items") or []
-                    _fichier_page(cache, categorie_id, taille_page, numero).write_text(
+                    _fichier_page(cache, categorie_id, taille_page, numero,
+                                  statuts).write_text(
                         json.dumps(items, ensure_ascii=False), encoding="utf-8")
                     enregistrer(items, categorie_id)
                     log.info("  page %d rattrapée — %d lots cumulés", numero, len(faits))

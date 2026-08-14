@@ -82,7 +82,7 @@ def _recuperer_page(categorie_id: int, statuts: list[str], page: int,
     a besoin du nombre total de pages — une information que le cache ne
     conserve pas.
     """
-    chemin = _fichier_page(cache, categorie_id, taille, page)
+    chemin = _fichier_page(cache, categorie_id, taille, page, statuts)
     if chemin.exists() and not forcer:
         items = _lire_cache(chemin)
         if items is not None:
