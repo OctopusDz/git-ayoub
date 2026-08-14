@@ -55,6 +55,10 @@ def comparables(lot: dict, historique: list[dict]) -> tuple[list[dict], str]:
     Les critères se desserrent par paliers jusqu'à réunir un effectif
     suffisant — l'appelant sait ainsi sur quelle base l'estimation repose.
     """
+    # Un invendu ne porte pas de prix atteint : il reste dans l'historique
+    # pour l'analyse, mais ne peut pas servir de référence de prix.
+    historique = [c for c in historique if c.get("prix")]
+
     marque = lot.get("marque")
     famille = _famille(lot)
     energie = energie_reelle(lot)

@@ -158,6 +158,7 @@ def normalize_lot(brut: dict, categorie_id: int, date_collecte: str) -> dict:
         "code_departement": code_dept,
         "departement": nom_dept,
         "region": region,
+        "metropole": ref.en_metropole(region),
         "centre_vente": (brut.get("sales_inspector_data") or {}).get("cav_name"),
 
         # -- dimensions vente ---------------------------------------------------
@@ -262,7 +263,7 @@ CHAMPS_EXPORT = [
     "gravite", "nb_defauts", "nb_defauts_majeurs", "sans_cle", "sans_carte_grise",
     "non_roulant", "premiere_main", "controle_technique_mentionne",
     "distribution_faite", "revision_recente", "defauts",
-    "ville", "code_postal", "code_departement", "departement", "region",
+    "ville", "code_postal", "code_departement", "departement", "region", "metropole",
     "centre_vente", "statut", "statut_code", "mode_vente", "reserve_aux_pros",
     "lot_prestige", "mise_a_prix", "derniere_enchere", "montant_adjuge", "prix",
     "multiple_mise_a_prix", "plus_value_euros", "plus_value_pct",

@@ -50,6 +50,8 @@ DIMENSIONS = [
     {"cle": "departement", "libelle": "Département", "type": "nominale", "groupe": "Géographie"},
     {"cle": "ville", "libelle": "Ville de retrait", "type": "nominale", "groupe": "Géographie"},
     {"cle": "centre_vente", "libelle": "Centre de vente", "type": "nominale", "groupe": "Géographie"},
+    {"cle": "metropole", "libelle": "France métropolitaine", "type": "nominale",
+     "groupe": "Géographie"},
 
     {"cle": "statut", "libelle": "Statut du lot", "type": "nominale", "groupe": "Vente"},
     {"cle": "mode_vente", "libelle": "Mode de vente", "type": "nominale", "groupe": "Vente"},

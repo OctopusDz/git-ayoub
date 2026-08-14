@@ -273,7 +273,7 @@ const CIBLES = {
 };
 
 function câblerOpportunites() {
-  ["#opp-cible", "#opp-tri", "#opp-roulant", "#opp-pro"].forEach((s) =>
+  ["#opp-cible", "#opp-tri", "#opp-metropole", "#opp-roulant", "#opp-pro"].forEach((s) =>
     $(s).addEventListener("change", rendreOpportunites));
 }
 
@@ -290,11 +290,13 @@ function lotsAVenir() {
 function rendreOpportunites() {
   const cible = CIBLES[$("#opp-cible").value] || CIBLES.toutes;
   const tri = $("#opp-tri").value;
+  const metropoleSeule = $("#opp-metropole").checked;
   const ecarterNonRoulants = $("#opp-roulant").checked;
   const ecarterPro = $("#opp-pro").checked;
 
   let lots = lotsAVenir().filter((i) => cible.retient(cube.valeur(i, "carburant")));
   const totalCible = lots.length;
+  if (metropoleSeule) lots = lots.filter((i) => cube.valeur(i, "metropole") !== "Non");
   if (ecarterNonRoulants) lots = lots.filter((i) => cube.valeur(i, "non_roulant") !== "Oui");
   if (ecarterPro) lots = lots.filter((i) => cube.valeur(i, "reserve_aux_pros") !== "Oui");
 

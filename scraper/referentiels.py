@@ -74,6 +74,17 @@ DEPARTEMENTS = {
 
 NOM_VERS_CODE = {nom.lower(): code for code, (nom, _) in DEPARTEMENTS.items()}
 
+# Territoires d'outre-mer : le coût d'acheminement d'un véhicule vers la
+# métropole dépasse en général la marge espérée sur une enchère.
+REGIONS_OUTRE_MER = {"Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte"}
+
+
+def en_metropole(region: str | None) -> bool | None:
+    """Vrai si la région est métropolitaine, None si elle est inconnue."""
+    if not region:
+        return None
+    return region not in REGIONS_OUTRE_MER
+
 # --- Tranches d'analyse (dimensions ordinales du cube) ---------------------
 TRANCHES_KM = [
     (0, 20_000, "0 – 20 000 km"),

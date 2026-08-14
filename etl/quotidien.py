@@ -34,11 +34,13 @@ log = logging.getLogger(__name__)
 def figer(source: Path = LOTS, destination: Path = HISTORIQUE) -> Path:
     """Fige les ventes closes en référence compressée et durable."""
     lots = json.loads(Path(source).read_text(encoding="utf-8"))["lots"]
-    closes = [l for l in lots
-              if l.get("prix") and l.get("statut") != "Vente à venir"]
+    # Les invendus font partie de l'historique : ils disent ce qui ne trouve
+    # pas preneur, information aussi utile que les prix atteints.
+    closes = [l for l in lots if l.get("statut") != "Vente à venir"]
     charge = {
         "fige_le": datetime.now().isoformat(timespec="seconds"),
         "nb_ventes_closes": len(closes),
+        "dont_adjugees": sum(1 for l in closes if l.get("prix")),
         "lots": closes,
     }
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -98,8 +100,11 @@ def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
     nouveaux = [l for l in faits if l["id_lot"] not in connus]
 
     def interessant(lot):
+        # L'outre-mer est écarté : l'acheminement vers la métropole coûte
+        # davantage que la marge attendue sur ces montants.
         return (lot.get("verdict") in ("Très intéressant", "Intéressant")
                 and (lot.get("carburant") or "").startswith("Hybride essence")
+                and lot.get("metropole") is not False
                 and not lot.get("non_roulant"))
 
     a_retenir = sorted([l for l in faits if interessant(l)],
