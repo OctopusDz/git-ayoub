@@ -309,13 +309,15 @@ function rendreOpportunites() {
   });
 
   const avertissement = $("#opp-avertissement");
+  const accord = lots.length > 1 ? cible.libelle : cible.libelle.replace(/s\b/g, "");
   avertissement.textContent =
-    `${lots.length} ${cible.libelle} en vente sur ${lotsAVenir().length} lots ouverts. `
+    `${lots.length} ${accord} en vente sur ${lotsAVenir().length} lots ouverts. `
     + "Les estimations viennent des ventes déjà closes : l'erreur médiane mesurée est "
     + "de 29 % tous véhicules confondus, nettement moindre sur les modèles très "
     + "représentés. Les 11 % de frais de vente sont déjà retranchés de l'enchère "
-    + "maximum conseillée. Un prix conseillé n'est pas une garantie — la fiche du "
-    + "lot et l'état réel priment.";
+    + "maximum conseillée, de même que les frais de garde, le rapatriement "
+    + "jusqu'à l'Île-de-France et la carte grise. Un prix conseillé n'est pas "
+    + "une garantie — la fiche du lot et l'état réel priment.";
 
   const zone = $("#opp-liste");
   zone.replaceChildren();
@@ -364,8 +366,9 @@ function carteOpportunite(i) {
     { libelle: "Prix attendu", valeur: cube.col.estimation[i], format: "euro" },
     { libelle: "Enchère max", valeur: cube.col.prix_max_conseille[i],
       format: "euro", classe: "plafond" },
-    { libelle: "Coût total, frais compris", valeur: cube.col.cout_total_max[i],
+    { libelle: "Coût total, tout compris", valeur: cube.col.cout_total_max[i],
       format: "euro", classe: "plafond" },
+    { libelle: "Frais annexes", valeur: cube.col.frais_annexes[i], format: "euro" },
     { libelle: "Marge", valeur: cube.col.marge_pct[i], format: "pourcent" },
   ];
   for (const c of cases) {
@@ -403,6 +406,20 @@ function carteOpportunite(i) {
       + `(${cube.valeur(i, "base_comparables")}) — confiance ${cube.valeur(i, "confiance")}.`
     : "Pas assez de ventes comparables pour estimer ce lot.";
   detail.append(ligne1, ligne2);
+
+  const frais = cube.valeur(i, "detail_frais");
+  if (frais) {
+    const ligne = document.createElement("div");
+    ligne.textContent = "Frais annexes — " + frais + ".";
+    detail.appendChild(ligne);
+  }
+  if (cube.valeur(i, "frais_incertains") === "Oui") {
+    const alerte = document.createElement("div");
+    alerte.className = "alerte-frais";
+    alerte.textContent = "Des frais annoncés n'ont pas de montant : le coût "
+      + "total ci-dessus est un minimum. Vérifiez la fiche avant d'enchérir.";
+    detail.appendChild(alerte);
+  }
 
   const description = cube.valeur(i, "description");
   if (description) {

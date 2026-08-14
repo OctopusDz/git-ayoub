@@ -188,11 +188,19 @@ def estimer(lot: dict, historique: list[dict]) -> dict:
     defauts_majeurs = lot.get("nb_defauts_majeurs") or 0
     reserve += min(0.15, 0.05 * defauts_majeurs)     # remise en état à prévoir
 
-    # Budget que l'opération doit respecter, frais compris.
+    # Budget que l'opération doit respecter, tout compris.
     budget_max = basse * (1 - reserve)
-    # L'enchère elle-même doit rester sous ce budget une fois les frais
+
+    # Les frais annexes se paient quel que soit le prix marteau : garde du
+    # fourriériste, rapatriement, carte grise. Ils viennent en déduction du
+    # budget avant que l'enchère ne soit calculée.
+    from etl.couts import cout_annexe
+    annexes = cout_annexe(lot)
+    budget_enchere = budget_max - annexes["total"]
+
+    # L'enchère elle-même doit tenir dans ce solde une fois les frais de vente
     # ajoutés : enchérir « à hauteur du budget » revient à le dépasser de 11 %.
-    prix_max = budget_max / (1 + TAUX_FRAIS)
+    prix_max = max(0.0, budget_enchere / (1 + TAUX_FRAIS))
 
     if mise and prix_max:
         marge = (prix_max - mise) / mise * 100
@@ -213,8 +221,17 @@ def estimer(lot: dict, historique: list[dict]) -> dict:
         fourchette_basse=round(basse),
         fourchette_haute=round(haute),
         prix_max_conseille=round(prix_max),
-        cout_total_max=round(prix_max * (1 + TAUX_FRAIS)),
+        cout_total_max=round(prix_max * (1 + TAUX_FRAIS) + annexes["total"]),
         taux_frais_pct=round(TAUX_FRAIS * 100),
+        frais_annexes=annexes["total"],
+        frais_garde=annexes["postes"]["garde"],
+        frais_rapatriement=annexes["postes"]["rapatriement"],
+        frais_carte_grise=annexes["postes"]["carte_grise"],
+        frais_incertains=annexes["incertain"],
+        detail_frais=(f"garde : {annexes['detail']['garde']} · "
+                      f"rapatriement {annexes['detail']['rapatriement']} "
+                      f"({annexes['detail']['distance_km']} km) · "
+                      f"carte grise : {annexes['detail']['carte_grise']}"),
         confiance=confiance,
         verdict=verdict,
         marge_pct=round(marge) if marge is not None else None,

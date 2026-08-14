@@ -71,6 +71,8 @@ DIMENSIONS = [
                "Pas de référence", "Mise à prix inconnue"]},
     {"cle": "confiance", "libelle": "Confiance de l'estimation", "type": "ordinale",
      "groupe": "Opportunité", "ordre": ["bonne", "moyenne", "faible", "aucune"]},
+    {"cle": "frais_incertains", "libelle": "Frais non chiffrés", "type": "nominale",
+     "groupe": "Opportunité"},
     {"cle": "hybride", "libelle": "Hybride", "type": "nominale", "groupe": "Véhicule"},
     {"cle": "base_hybride", "libelle": "Base de l'hybride", "type": "nominale", "groupe": "Véhicule"},
     {"cle": "annee_douteuse", "libelle": "Millésime incohérent", "type": "nominale", "groupe": "Véhicule"},
@@ -145,6 +147,7 @@ CHAMPS_NUMERIQUES = [
     "nb_defauts", "nb_defauts_majeurs", "completude_pct", "jours_restants",
     "estimation", "cout_si_prix_attendu", "fourchette_basse", "fourchette_haute",
     "prix_max_conseille", "cout_total_max", "marge_pct", "nb_comparables",
+    "frais_annexes", "frais_garde", "frais_rapatriement", "frais_carte_grise",
     "nb_places", "nb_portes", "nb_cles", "duree_vente_heures",
 ]
 
@@ -157,7 +160,8 @@ CHAMPS_BOOLEENS = ["a_depasse_mise_a_prix", "non_roulant", "sans_cle",
 # Colonnes de texte libre, affichées dans la table de détail.
 CHAMPS_TEXTE = ["id_lot", "intitule", "url", "image", "sku", "numero_lot",
                 "immatriculation", "vin", "date_fin", "date_debut",
-                "date_mise_en_circulation", "description", "base_comparables"]
+                "date_mise_en_circulation", "description", "base_comparables",
+                "detail_frais"]
 
 BOOLEENS_LISIBLES = {True: "Oui", False: "Non"}
 
@@ -185,6 +189,14 @@ def estimer_ventes_a_venir(lots: list[dict]) -> int:
             "marge_pct": resultat["marge_pct"],
             "nb_comparables": resultat["nb_comparables"],
             "base_comparables": resultat["base"],
+            "cout_si_prix_attendu": resultat.get("cout_si_prix_attendu"),
+            "cout_total_max": resultat.get("cout_total_max"),
+            "frais_annexes": resultat.get("frais_annexes"),
+            "frais_garde": resultat.get("frais_garde"),
+            "frais_rapatriement": resultat.get("frais_rapatriement"),
+            "frais_carte_grise": resultat.get("frais_carte_grise"),
+            "frais_incertains": resultat.get("frais_incertains"),
+            "detail_frais": resultat.get("detail_frais"),
         })
     print(f"  {len(a_venir)} ventes à venir estimées "
           f"sur {len(historique)} ventes closes")
