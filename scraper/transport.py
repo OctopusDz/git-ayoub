@@ -119,8 +119,42 @@ def creer(entetes: dict[str, str], prefere: str = "auto") -> Transport:
     return TransportUrllib(entetes)
 
 
+def amorcer_session(transport: Transport) -> bool:
+    """Valide la session sur la page d'accueil, une fois pour toutes.
+
+    C'est là que le contrôle anti-robot se joue : la page d'accueil renvoie
+    une redirection JavaScript vers une URL à jeton ; demander cette URL scelle
+    le cookie de la session. Les appels GraphQL passent ensuite directement,
+    sans jamais revoir le contrôle. Le tenter sur l'URL de l'API, au contraire,
+    fait boucler le jeton indéfiniment.
+    """
+    try:
+        corps = transport.get(config.BASE_URL)
+    except Exception as exc:
+        log.warning("page d'accueil inaccessible (%s)", exc)
+        return False
+
+    trouve = REDIRECTION_JS.search(corps[:8192].decode("utf-8", "replace"))
+    if not trouve:
+        return True                        # aucun contrôle : session déjà bonne
+
+    jeton = urllib.parse.urljoin(config.BASE_URL, trouve.group(1).replace("&amp;", "&"))
+    try:
+        transport.get(jeton)
+        log.debug("session validée par le jeton de la page d'accueil")
+        return True
+    except Exception as exc:
+        log.warning("validation de session impossible (%s)", exc)
+        return False
+
+
 def resoudre_challenge(transport: Transport, url: str) -> bytes:
     """Demande une URL et déroule le contrôle anti-robot jusqu'au contenu réel.
+
+    Le contrôle se déroule en deux temps : la première réponse porte une URL à
+    jeton, et demander cette URL valide le cookie — mais renvoie la page de
+    retour du site, pas la ressource demandée. Il faut alors **redemander
+    l'URL d'origine**, que la session validée sert cette fois normalement.
 
     Renvoie le corps de la réponse ; à l'appelant de vérifier que c'est bien
     du JSON exploitable.
@@ -129,10 +163,21 @@ def resoudre_challenge(transport: Transport, url: str) -> bytes:
     for tour in range(MAX_CHALLENGES):
         tete = corps[:4096].decode("utf-8", "replace")
         trouve = REDIRECTION_JS.search(tete)
-        if not trouve:
-            return corps
-        jeton = urllib.parse.urljoin(config.BASE_URL,
-                                     trouve.group(1).replace("&amp;", "&"))
-        log.debug("contrôle anti-robot, tour %d", tour + 1)
-        corps = transport.get(jeton)
+
+        if trouve:
+            jeton = urllib.parse.urljoin(config.BASE_URL,
+                                         trouve.group(1).replace("&amp;", "&"))
+            log.debug("contrôle anti-robot, tour %d : validation du jeton", tour + 1)
+            transport.get(jeton)          # valide le cookie ; la réponse importe peu
+            corps = transport.get(url)    # la ressource, cette fois-ci
+            continue
+
+        if tete.lstrip()[:1] == "<":
+            # Page HTML sans jeton : la session vient d'être renvoyée à
+            # l'accueil. Une simple nouvelle demande suffit.
+            log.debug("contrôle anti-robot, tour %d : nouvelle demande", tour + 1)
+            corps = transport.get(url)
+            continue
+
+        return corps
     return corps

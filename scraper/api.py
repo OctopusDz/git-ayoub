@@ -70,15 +70,12 @@ class DomaineClient:
 
     # -- session ------------------------------------------------------------
     def amorcer(self) -> None:
-        """Visite la page d'accueil pour obtenir PHPSESSID et le cookie
-        anti-robot, sans lesquels l'API répond parfois en erreur."""
+        """Valide la session sur la page d'accueil : le contrôle anti-robot s'y
+        résout une fois, et les appels GraphQL passent ensuite directement."""
         if self._amorce_faite:
             return
         self._amorce_faite = True
-        try:
-            self.transport.get(config.BASE_URL)
-        except Exception as exc:
-            log.warning("amorçage de session impossible (%s) — on tente sans", exc)
+        transport_http.amorcer_session(self.transport)
 
     # -- appel générique ----------------------------------------------------
     def graphql(self, query: str, variables: dict | None = None,

@@ -59,6 +59,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--har", default=None,
                         help="fichier HAR récent : reprend les cookies d'une "
                              "session de navigation pour passer le contrôle anti-robot")
+    parser.add_argument("--fils", type=int, default=12,
+                        help="collecte parallèle : nombre de sessions simultanées "
+                             "(1 = séquentiel, défaut : %(default)s)")
     parser.add_argument("--depuis-cache", action="store_true",
                         help="reconstruit les fichiers à partir des pages déjà "
                              "collectées, sans aucun appel réseau")
@@ -82,6 +85,24 @@ def main(argv: list[str] | None = None) -> int:
         faits, rapport = depuis_cache(_categories(args.categories), args.taille_page)
         if not faits:
             logging.error("cache vide — lancez d'abord une collecte")
+            return 1
+        return _ecrire(faits, rapport, Path(args.sortie), args.sans_cube)
+
+    if args.fils > 1:
+        from .parallele import collecter_parallele
+        try:
+            faits, rapport = collecter_parallele(
+                categories=_categories(args.categories),
+                statuts=[s.strip() for s in args.statuts.split(",") if s.strip()],
+                taille_page=args.taille_page,
+                fils=args.fils,
+                max_pages=args.max_pages if args.max_pages < config.MAX_PAGES else None,
+            )
+        except Exception as exc:
+            logging.error("collecte interrompue : %s", exc)
+            return 1
+        if not faits:
+            logging.error("aucun lot collecté")
             return 1
         return _ecrire(faits, rapport, Path(args.sortie), args.sans_cube)
 
