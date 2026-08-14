@@ -6,43 +6,15 @@ ses dimensions).
 """
 from __future__ import annotations
 
-# --- Marques automobiles (détection dans les titres en texte libre) ---------
-MARQUES = [
-    "ALFA ROMEO", "ASTON MARTIN", "AUDI", "BMW", "CHEVROLET", "CHRYSLER",
-    "CITROEN", "CITROËN", "CUPRA", "DACIA", "DAEWOO", "DAIHATSU", "DODGE",
-    "DS", "FIAT", "FORD", "HONDA", "HYUNDAI", "INFINITI", "ISUZU", "IVECO",
-    "JAGUAR", "JEEP", "KIA", "LADA", "LANCIA", "LAND ROVER", "LEXUS",
-    "MAHINDRA", "MASERATI", "MAZDA", "MERCEDES", "MERCEDES-BENZ", "MG",
-    "MINI", "MITSUBISHI", "NISSAN", "OPEL", "PEUGEOT", "PORSCHE", "RENAULT",
-    "ROVER", "SAAB", "SEAT", "SKODA", "SMART", "SSANGYONG", "SUBARU",
-    "SUZUKI", "TESLA", "TOYOTA", "VOLKSWAGEN", "VOLVO", "VW",
-]
-
-# Formes canoniques (le libellé retenu dans le cube).
+# --- Marques : formes canoniques retenues dans le cube ----------------------
 ALIAS_MARQUES = {
+    "CITROEN": "CITROEN",
     "CITROËN": "CITROEN",
     "VW": "VOLKSWAGEN",
     "MERCEDES": "MERCEDES-BENZ",
+    "MERCEDES BENZ": "MERCEDES-BENZ",
     "LAND-ROVER": "LAND ROVER",
-}
-
-# --- Énergies ---------------------------------------------------------------
-ALIAS_CARBURANT = {
-    "go": "Diesel", "gazole": "Diesel", "gasoil": "Diesel", "diesel": "Diesel",
-    "dci": "Diesel", "hdi": "Diesel", "tdi": "Diesel",
-    "es": "Essence", "essence": "Essence", "sp95": "Essence", "sp98": "Essence",
-    "eh": "Hybride essence", "hybride": "Hybride", "hybride essence": "Hybride essence",
-    "hybride rechargeable": "Hybride rechargeable", "phev": "Hybride rechargeable",
-    "el": "Électrique", "electrique": "Électrique", "électrique": "Électrique",
-    "ev": "Électrique",
-    "gpl": "GPL", "gnv": "GNV", "gaz": "GPL",
-}
-
-ALIAS_BOITE = {
-    "ba": "Automatique", "auto": "Automatique", "automatique": "Automatique",
-    "bva": "Automatique", "edc": "Automatique", "dsg": "Automatique",
-    "bm": "Manuelle", "manuelle": "Manuelle", "mecanique": "Manuelle",
-    "mécanique": "Manuelle", "bvm": "Manuelle",
+    "SSANG YONG": "SSANGYONG",
 }
 
 # --- Départements -> (nom, région) -----------------------------------------
@@ -146,3 +118,19 @@ def tranche(valeur, table) -> str | None:
 def ordre_tranches(table) -> list[str]:
     """Ordre d'affichage d'une dimension ordinale."""
     return [libelle for _, _, libelle in table]
+
+
+def departement_depuis_cp(code_postal: str | None):
+    """Code postal -> (code département, nom, région)."""
+    if not code_postal:
+        return None, None, None
+    code_postal = str(code_postal).strip()
+    if len(code_postal) < 2 or not code_postal[:2].isdigit():
+        return None, None, None
+    code = code_postal[:3] if code_postal.startswith("97") else code_postal[:2]
+    if code == "20":                       # Corse : 200xx/201xx -> 2A, 202xx -> 2B
+        code = "2B" if code_postal[:3] in ("202", "206", "207") else "2A"
+    if code not in DEPARTEMENTS:
+        return None, None, None
+    nom, region = DEPARTEMENTS[code]
+    return code, nom, region

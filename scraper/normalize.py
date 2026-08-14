@@ -1,279 +1,251 @@
-"""Normalisation et enrichissement : du lot brut au fait analytique.
+"""Normalisation : de la réponse API au fait analytique.
 
-Sortie : un enregistrement plat, une ligne = un lot, prêt à alimenter le cube.
+Une ligne = un lot, avec ses dimensions (quoi, où, quand, dans quel état) et
+ses mesures (mise à prix, dernière enchère, plus-value…), prêtes pour le cube.
 """
 from __future__ import annotations
 
 import re
-import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
+from . import config
+from . import description as desc
 from . import referentiels as ref
-from .parse import to_date, to_money, to_number
 
-CODE_POSTAL_RE = re.compile(r"\b(\d{5})\b")
-CODE_DEPT_RE = re.compile(r"\b(2[AB]|9[7][1-6]|\d{2})\b")
-
-
-def sans_accents(value: str) -> str:
-    return "".join(c for c in unicodedata.normalize("NFD", value)
-                   if unicodedata.category(c) != "Mn")
+# Marques en deux mots : à tester avant le découpage sur le premier espace.
+MARQUES_COMPOSEES = ["ALFA ROMEO", "ASTON MARTIN", "LAND ROVER", "MERCEDES BENZ",
+                     "MERCEDES-BENZ", "ROLLS ROYCE", "GREAT WALL", "SSANG YONG"]
 
 
-def detect_marque(*sources: str | None) -> str | None:
-    """Repère une marque connue dans le titre ou la description."""
-    blob = sans_accents(" ".join(s for s in sources if s).upper())
-    trouvees = [m for m in ref.MARQUES if re.search(rf"\b{re.escape(sans_accents(m))}\b", blob)]
-    if not trouvees:
+def _horodatage(valeur: str | None) -> str | None:
+    """'2025-07-11T08:00:00+00:00' -> '2025-07-11T08:00:00' (heure UTC)."""
+    if not valeur:
         return None
-    marque = max(trouvees, key=len)          # « LAND ROVER » plutôt que « ROVER »
-    return ref.ALIAS_MARQUES.get(marque, marque)
-
-
-def detect_modele(titre: str | None, marque: str | None) -> str | None:
-    """Mot(s) suivant la marque dans le titre — approximation acceptable."""
-    if not titre or not marque:
+    try:
+        return datetime.fromisoformat(valeur.replace("Z", "+00:00")) \
+            .astimezone(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+    except Exception:
         return None
-    plat = sans_accents(titre).upper()
-    cible = sans_accents(marque).upper()
-    idx = plat.find(cible)
-    if idx < 0:
-        for alias, canon in ref.ALIAS_MARQUES.items():
-            if canon == marque:
-                idx = plat.find(sans_accents(alias).upper())
-                if idx >= 0:
-                    cible = sans_accents(alias).upper()
-                    break
-    if idx < 0:
+
+
+def _jour(valeur: str | None) -> str | None:
+    return valeur[:10] if valeur else None
+
+
+def _nombre(valeur) -> float | None:
+    if valeur in (None, "", False):
         return None
-    suite = titre[idx + len(cible):].strip(" -–—,/")
-    mots = [m for m in re.split(r"[\s,/]+", suite) if m][:2]
-    modele = " ".join(mots).strip(" -–—,.")
-    modele = re.sub(r"^(de|du|type)\b\s*", "", modele, flags=re.I)
-    return modele.upper() or None
-
-
-def normalize_carburant(value: str | None) -> str | None:
-    if not value:
+    try:
+        nombre = float(valeur)
+    except (TypeError, ValueError):
         return None
-    key = sans_accents(str(value)).lower().strip()
-    for alias, canon in ref.ALIAS_CARBURANT.items():
-        if key == sans_accents(alias).lower() or sans_accents(alias).lower() in key:
-            return canon
-    return value.strip().capitalize()
+    return nombre
 
 
-def normalize_boite(value: str | None) -> str | None:
-    if not value:
-        return None
-    key = sans_accents(str(value)).lower().strip()
-    for alias, canon in ref.ALIAS_BOITE.items():
-        if key == sans_accents(alias).lower() or sans_accents(alias).lower() in key:
-            return canon
-    return value.strip().capitalize()
+def separer_marque_modele(nom: str | None) -> tuple[str | None, str | None]:
+    """'RENAULT Twingo' -> ('RENAULT', 'TWINGO')."""
+    if not nom:
+        return None, None
+    propre = re.sub(r"\s+", " ", nom.strip())
+    majuscules = desc.sans_accents(propre).upper()
+
+    for composee in MARQUES_COMPOSEES:
+        if majuscules.startswith(composee):
+            marque = ref.ALIAS_MARQUES.get(composee, composee)
+            modele = propre[len(composee):].strip(" -–,/").upper()
+            return marque, modele or None
+
+    morceaux = propre.split(" ", 1)
+    marque = desc.sans_accents(morceaux[0]).upper()
+    marque = ref.ALIAS_MARQUES.get(marque, marque)
+    modele = morceaux[1].strip(" -–,/").upper() if len(morceaux) > 1 else None
+    return marque or None, modele or None
 
 
-def detect_departement(*sources: str | None) -> tuple[str | None, str | None, str | None]:
-    """(code, nom, région) déduits d'un code postal ou d'un nom de département."""
-    blob = " ".join(s for s in sources if s)
-    if not blob:
-        return None, None, None
+def normalize_lot(brut: dict, categorie_id: int, date_collecte: str) -> dict:
+    """Transforme un item de l'API en fait analytique enrichi."""
+    infos = desc.analyser((brut.get("short_description") or {}).get("html"),
+                          (brut.get("description") or {}).get("html"))
 
-    cp = CODE_POSTAL_RE.search(blob)
-    if cp:
-        code = cp.group(1)[:2]
-        if code == "20":
-            code = "2A"
-        if cp.group(1).startswith("97"):
-            code = cp.group(1)[:3]
-        if code in ref.DEPARTEMENTS:
-            nom, region = ref.DEPARTEMENTS[code]
-            return code, nom, region
+    marque, modele = separer_marque_modele(brut.get("name"))
+    lieu = brut.get("dropoff_location") or {}
+    code_postal = (lieu.get("postcode") or "").strip() or None
+    ville = (lieu.get("city") or "").strip().title() or None
 
-    plat = sans_accents(blob).lower()
-    for nom_dept, code in ref.NOM_VERS_CODE.items():
-        if sans_accents(nom_dept) in plat:
-            nom, region = ref.DEPARTEMENTS[code]
-            return code, nom, region
+    code_dept, nom_dept, region = ref.departement_depuis_cp(code_postal)
 
-    dept = CODE_DEPT_RE.search(blob)
-    if dept and dept.group(1) in ref.DEPARTEMENTS:
-        code = dept.group(1)
-        nom, region = ref.DEPARTEMENTS[code]
-        return code, nom, region
-    return None, None, None
+    mise_a_prix = _nombre(brut.get("price_auction"))
+    derniere_enchere = _nombre(brut.get("last_bid"))
+    montant_adjuge = _nombre(brut.get("bid_winner_amount"))
+    prix = montant_adjuge or derniere_enchere or None
 
+    debut = _horodatage(brut.get("start_auction_lot_at") or brut.get("start_date"))
+    fin = _horodatage(brut.get("end_auction_lot_at") or brut.get("end_date"))
+    limite_offres = _horodatage(brut.get("offers_submission_deadline"))
 
-def detect_ville(lieu: str | None) -> str | None:
-    if not lieu:
-        return None
-    nettoye = CODE_POSTAL_RE.sub(" ", lieu)
-    morceaux = [m.strip() for m in re.split(r"[,;()\-–]", nettoye) if m.strip()]
-    if not morceaux:
-        return None
-    ville = max(morceaux, key=len).strip()
-    return ville.title()[:60] or None
+    annee = infos.get("annee")
+    mise_en_circulation = infos.get("date_mise_en_circulation")
+    kilometrage = infos.get("kilometrage")
 
-
-def extract_annee(*sources) -> int | None:
-    for source in sources:
-        if source is None:
-            continue
-        if isinstance(source, (int, float)):
-            annee = int(source)
-            if 1950 <= annee <= date.today().year + 1:
-                return annee
-            continue
-        match = re.search(r"\b(19[5-9]\d|20[0-4]\d)\b", str(source))
-        if match:
-            return int(match.group(1))
-    return None
-
-
-def normalize_lot(brut: dict, contexte: dict | None = None) -> dict:
-    """Transforme un lot brut (scrapé) en fait analytique enrichi."""
-    contexte = contexte or {}
-    titre = (brut.get("titre") or "").strip() or None
-    description = brut.get("description")
-
-    marque = (brut.get("marque") or "").strip().upper() or None
-    if marque:
-        marque = ref.ALIAS_MARQUES.get(marque, marque)
-    marque = marque or detect_marque(titre, description)
-
-    modele = (brut.get("modele") or "").strip().upper() or detect_modele(titre, marque)
-
-    annee = extract_annee(brut.get("annee"), brut.get("date_mise_en_circulation"), titre)
-    kilometrage = to_number(brut.get("kilometrage"))
-    if kilometrage is not None and kilometrage > 1_500_000:
-        kilometrage = None                          # valeur aberrante
-
-    prix = to_money(brut.get("prix_courant")) or to_money(brut.get("prix_liste"))
-    mise_a_prix = to_money(brut.get("mise_a_prix")) or to_money(brut.get("mise_a_prix_liste"))
-    nb_encheres = to_number(brut.get("nb_encheres"))
-
-    lieu = brut.get("lieu") or brut.get("lieu_liste")
-    code_dept, nom_dept, region = detect_departement(lieu, brut.get("departement"))
-
-    date_fin = to_date(brut.get("date_fin")) or to_date(brut.get("date_fin_liste"))
-    date_debut = to_date(brut.get("date_debut"))
-
-    annee_courante = date.today().year
-    age = annee_courante - annee if annee else None
+    # Âge du véhicule à la date de vente (à défaut, à aujourd'hui).
+    reference = date.fromisoformat(fin[:10]) if fin else date.today()
+    age = None
+    if mise_en_circulation:
+        naissance = date.fromisoformat(mise_en_circulation)
+        age = round((reference - naissance).days / 365.25, 1)
+    elif annee:
+        age = reference.year - annee
 
     fait = {
-        # -- identité ------------------------------------------------------
-        "id_lot": brut.get("id_lot"),
-        "url": brut.get("url"),
-        "titre": titre,
-        "categorie": contexte.get("categorie") or brut.get("categorie"),
-        "statut": brut.get("statut") or brut.get("statut_liste"),
-        "image": brut.get("image") or (brut.get("images") or [None])[0],
+        # -- identité --------------------------------------------------------
+        "id_lot": brut.get("id"),
+        "uid": brut.get("uid"),
+        "sku": brut.get("sku"),
+        "numero_lot": brut.get("lot_number"),
+        "url": f"{config.BASE_URL}/lot/{brut['url_key']}.html" if brut.get("url_key") else None,
+        "intitule": brut.get("name"),
+        "image": (brut.get("small_image") or {}).get("url"),
+        "categorie_id": categorie_id,
+        "categorie": config.CATEGORIES.get(categorie_id, str(categorie_id)),
 
-        # -- dimensions véhicule -------------------------------------------
+        # -- dimensions véhicule ---------------------------------------------
         "marque": marque,
         "modele": modele,
         "annee": annee,
+        "date_mise_en_circulation": mise_en_circulation,
         "age": age,
         "kilometrage": kilometrage,
-        "carburant": normalize_carburant(brut.get("carburant")),
-        "boite_vitesses": normalize_boite(brut.get("boite_vitesses")),
-        "puissance_fiscale": to_number(brut.get("puissance_fiscale")),
-        "puissance_din": to_number(brut.get("puissance_din")),
-        "nb_places": to_number(brut.get("nb_places")),
-        "nb_portes": to_number(brut.get("nb_portes")),
-        "couleur": (brut.get("couleur") or "").strip().capitalize() or None,
-        "etat": (brut.get("etat") or "").strip().capitalize() or None,
-        "controle_technique": brut.get("controle_technique"),
-        "immatriculation": brut.get("immatriculation"),
+        "kilometrage_methode": infos.get("kilometrage_methode"),
+        "carburant": infos.get("carburant"),
+        "boite_vitesses": infos.get("boite_vitesses"),
+        "critair": infos.get("critair"),
+        "norme_euro": infos.get("norme_euro"),
+        "nb_places": infos.get("nb_places"),
+        "nb_portes": infos.get("nb_portes"),
+        "nb_cles": infos.get("nb_cles"),
+        "immatriculation": infos.get("immatriculation"),
+        "vin": infos.get("vin"),
+        "type_mines": infos.get("type_mines"),
 
-        # -- dimensions géographiques --------------------------------------
-        "lieu": lieu,
-        "ville": detect_ville(lieu),
+        # -- état --------------------------------------------------------------
+        "gravite": infos.get("gravite"),
+        "defauts": infos.get("defauts") or [],
+        "nb_defauts": infos.get("nb_defauts"),
+        "nb_defauts_majeurs": infos.get("nb_defauts_majeurs"),
+        "sans_cle": infos.get("sans_cle"),
+        "sans_carte_grise": infos.get("sans_carte_grise"),
+        "non_roulant": infos.get("non_roulant"),
+        "premiere_main": infos.get("premiere_main"),
+        "controle_technique_mentionne": infos.get("controle_technique_mentionne"),
+        "distribution_faite": infos.get("distribution_faite"),
+        "revision_recente": infos.get("revision_recente"),
+        "date_entree_parc": infos.get("date_entree_parc"),
+
+        # -- dimensions géographiques -----------------------------------------
+        "ville": ville,
+        "code_postal": code_postal,
         "code_departement": code_dept,
         "departement": nom_dept,
         "region": region,
-        "service_vendeur": brut.get("service_vendeur"),
+        "centre_vente": (brut.get("sales_inspector_data") or {}).get("cav_name"),
 
-        # -- mesures --------------------------------------------------------
+        # -- dimensions vente ---------------------------------------------------
+        "statut_code": brut.get("lot_status"),
+        "statut": brut.get("lot_status_label"),
+        "mode_vente": "Appel d'offres" if limite_offres else "Enchère",
+        "reserve_aux_pros": bool(brut.get("professional_only")),
+        "lot_prestige": bool(brut.get("luxury")),
+
+        # -- mesures ------------------------------------------------------------
         "mise_a_prix": mise_a_prix,
+        "derniere_enchere": derniere_enchere,
+        "montant_adjuge": montant_adjuge,
         "prix": prix,
-        "nb_encheres": nb_encheres,
+        "prix_reserve": _nombre(brut.get("reserve_price")) or None,
 
-        # -- dimensions temps -----------------------------------------------
-        "date_debut": date_debut,
-        "date_fin": date_fin,
+        # -- dimensions temps ----------------------------------------------------
+        "date_debut": debut,
+        "date_fin": fin,
+        "jour_debut": _jour(debut),
+        "jour_fin": _jour(fin),
+        "limite_offres": limite_offres,
 
-        # -- traçabilité -----------------------------------------------------
-        "date_collecte": contexte.get("date_collecte") or datetime.now().isoformat(timespec="seconds"),
+        # -- traçabilité ----------------------------------------------------------
+        "date_collecte": date_collecte,
         "source": "encheres-domaine.gouv.fr",
+        "description": infos.get("description"),
     }
 
-    # -- indicateurs dérivés -------------------------------------------------
+    # -- indicateurs dérivés ----------------------------------------------------
     if prix and mise_a_prix and mise_a_prix > 0:
         fait["multiple_mise_a_prix"] = round(prix / mise_a_prix, 3)
         fait["plus_value_euros"] = round(prix - mise_a_prix, 2)
         fait["plus_value_pct"] = round((prix / mise_a_prix - 1) * 100, 1)
+        fait["a_depasse_mise_a_prix"] = prix > mise_a_prix
     else:
         fait["multiple_mise_a_prix"] = None
         fait["plus_value_euros"] = None
         fait["plus_value_pct"] = None
+        fait["a_depasse_mise_a_prix"] = None
 
-    if prix and kilometrage and kilometrage > 0:
-        fait["prix_par_1000km"] = round(prix / (kilometrage / 1000), 2)
-    else:
-        fait["prix_par_1000km"] = None
+    fait["prix_par_1000km"] = (round(prix / (kilometrage / 1000), 2)
+                               if prix and kilometrage else None)
+    fait["km_par_an"] = (round(kilometrage / age) if kilometrage and age and age >= 1
+                         else None)
 
-    if prix and fait["puissance_fiscale"]:
-        fait["prix_par_cv"] = round(prix / fait["puissance_fiscale"], 2)
-    else:
-        fait["prix_par_cv"] = None
-
-    if kilometrage is not None and age and age > 0:
-        fait["km_par_an"] = round(kilometrage / age)
-    else:
-        fait["km_par_an"] = None
-
-    # -- dimensions ordinales (tranches) ------------------------------------
+    # -- tranches d'analyse -------------------------------------------------------
     fait["tranche_km"] = ref.tranche(kilometrage, ref.TRANCHES_KM)
     fait["tranche_prix"] = ref.tranche(prix, ref.TRANCHES_PRIX)
+    fait["tranche_mise_a_prix"] = ref.tranche(mise_a_prix, ref.TRANCHES_PRIX)
     fait["tranche_age"] = ref.tranche(age, ref.TRANCHES_AGE)
 
-    # -- dimension temps (hiérarchie année > trimestre > mois) ---------------
-    if date_fin:
-        d = datetime.fromisoformat(date_fin).date()
-        fait["annee_vente"] = d.year
-        fait["trimestre_vente"] = f"{d.year}-T{(d.month - 1) // 3 + 1}"
-        fait["mois_vente"] = f"{d.year}-{d.month:02d}"
-        fait["semaine_vente"] = f"{d.isocalendar().year}-S{d.isocalendar().week:02d}"
+    # -- hiérarchie temps ----------------------------------------------------------
+    if fin:
+        jour_fin = date.fromisoformat(fin[:10])
+        iso = jour_fin.isocalendar()
+        fait["annee_vente"] = jour_fin.year
+        fait["trimestre_vente"] = f"{jour_fin.year}-T{(jour_fin.month - 1) // 3 + 1}"
+        fait["mois_vente"] = f"{jour_fin.year}-{jour_fin.month:02d}"
+        fait["semaine_vente"] = f"{iso.year}-S{iso.week:02d}"
         fait["jour_semaine_vente"] = ["Lundi", "Mardi", "Mercredi", "Jeudi",
-                                      "Vendredi", "Samedi", "Dimanche"][d.weekday()]
-        fait["jours_restants"] = (d - date.today()).days
+                                      "Vendredi", "Samedi", "Dimanche"][jour_fin.weekday()]
+        fait["jours_restants"] = (jour_fin - date.today()).days
+        fait["vente_passee"] = jour_fin < date.today()
     else:
-        for champ in ("annee_vente", "trimestre_vente", "mois_vente",
-                      "semaine_vente", "jour_semaine_vente", "jours_restants"):
+        for champ in ("annee_vente", "trimestre_vente", "mois_vente", "semaine_vente",
+                      "jour_semaine_vente", "jours_restants", "vente_passee"):
             fait[champ] = None
 
-    # -- qualité de la donnée -------------------------------------------------
+    if debut and fin:
+        fait["duree_vente_heures"] = round(
+            (datetime.fromisoformat(fin) - datetime.fromisoformat(debut)).total_seconds() / 3600, 1)
+    else:
+        fait["duree_vente_heures"] = None
+
+    # -- complétude ------------------------------------------------------------------
     champs_cles = ["marque", "modele", "annee", "kilometrage", "carburant",
-                   "prix", "mise_a_prix", "departement", "date_fin"]
-    remplis = sum(1 for c in champs_cles if fait.get(c) not in (None, ""))
+                   "prix", "mise_a_prix", "departement", "date_fin", "vin"]
+    remplis = sum(1 for c in champs_cles if fait.get(c) not in (None, "", []))
     fait["completude_pct"] = round(100 * remplis / len(champs_cles))
 
     return fait
 
 
 CHAMPS_EXPORT = [
-    "id_lot", "url", "titre", "categorie", "statut", "image",
-    "marque", "modele", "annee", "age", "kilometrage", "carburant",
-    "boite_vitesses", "puissance_fiscale", "puissance_din", "nb_places",
-    "nb_portes", "couleur", "etat", "controle_technique", "immatriculation",
-    "lieu", "ville", "code_departement", "departement", "region",
-    "service_vendeur", "mise_a_prix", "prix", "nb_encheres",
+    "id_lot", "sku", "numero_lot", "url", "intitule", "categorie",
+    "marque", "modele", "annee", "date_mise_en_circulation", "age",
+    "kilometrage", "carburant", "boite_vitesses", "critair", "norme_euro",
+    "nb_places", "nb_portes", "nb_cles", "immatriculation", "vin", "type_mines",
+    "gravite", "nb_defauts", "nb_defauts_majeurs", "sans_cle", "sans_carte_grise",
+    "non_roulant", "premiere_main", "controle_technique_mentionne",
+    "distribution_faite", "revision_recente", "defauts",
+    "ville", "code_postal", "code_departement", "departement", "region",
+    "centre_vente", "statut", "statut_code", "mode_vente", "reserve_aux_pros",
+    "lot_prestige", "mise_a_prix", "derniere_enchere", "montant_adjuge", "prix",
     "multiple_mise_a_prix", "plus_value_euros", "plus_value_pct",
-    "prix_par_1000km", "prix_par_cv", "km_par_an",
-    "tranche_km", "tranche_prix", "tranche_age",
+    "a_depasse_mise_a_prix", "prix_par_1000km", "km_par_an",
+    "tranche_km", "tranche_prix", "tranche_mise_a_prix", "tranche_age",
     "date_debut", "date_fin", "annee_vente", "trimestre_vente", "mois_vente",
-    "semaine_vente", "jour_semaine_vente", "jours_restants",
-    "completude_pct", "date_collecte", "source",
+    "semaine_vente", "jour_semaine_vente", "jours_restants", "vente_passee",
+    "duree_vente_heures", "completude_pct", "date_collecte", "source",
 ]

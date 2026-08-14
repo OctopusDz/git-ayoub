@@ -1,106 +1,115 @@
-"""Orchestration : parcours des pages de résultats puis des fiches de lot."""
+"""Orchestration de la collecte : pagination de l'API, normalisation, rapport."""
 from __future__ import annotations
 
 import logging
 from datetime import datetime
 
 from . import config
-from .fetch import Fetcher
+from .api import DomaineClient
 from .normalize import normalize_lot
-from .parse import build_listing_url, parse_detail, parse_listing, total_pages
 
 log = logging.getLogger(__name__)
 
 
-def collecter(categorie: str = "vehicules-de-tourisme",
-              statuts: list[int] | None = None,
+def collecter(categories: list[int] | None = None,
+              statuts: list[str] | None = None,
+              taille_page: int = config.PAGE_SIZE,
               max_pages: int = config.MAX_PAGES,
               max_lots: int | None = None,
-              avec_detail: bool = True,
-              fetcher: Fetcher | None = None) -> tuple[list[dict], dict]:
-    """Collecte les lots d'une catégorie et retourne (faits, rapport)."""
+              client: DomaineClient | None = None) -> tuple[list[dict], dict]:
+    """Collecte les lots d'une ou plusieurs catégories.
+
+    Retourne ``(faits, rapport)``. Les doublons entre catégories sont écartés
+    sur l'identifiant de lot.
+    """
+    categories = categories or [config.DEFAULT_CATEGORIE]
     statuts = statuts or config.DEFAULT_LOT_STATUS
-    chemin = config.CATEGORY_PATHS.get(categorie, categorie)
-    selecteurs = config.load_selectors()
-    fetcher = fetcher or Fetcher()
+    client = client or DomaineClient()
+    date_collecte = datetime.now().isoformat(timespec="seconds")
 
     rapport = {
-        "categorie": categorie,
+        "demarre_le": date_collecte,
+        "categories": {},
         "statuts": statuts,
-        "pages_lues": 0,
-        "lots_listes": 0,
-        "fiches_lues": 0,
-        "fiches_en_echec": 0,
-        "demarre_le": datetime.now().isoformat(timespec="seconds"),
+        "taille_page": taille_page,
+        "appels_api": 0,
+        "lots_en_erreur": 0,
     }
 
-    # --- 1. pagination -----------------------------------------------------
-    entrees: dict[str, dict] = {}
-    url = build_listing_url(chemin, statuts, 1)
-    page_num = 1
-    while url and page_num <= max_pages:
-        html = fetcher.get(url)
-        if not html:
-            log.error("page %d inaccessible — arrêt de la pagination", page_num)
-            break
-        rapport["pages_lues"] += 1
-        if page_num == 1:
-            total = total_pages(html, selecteurs)
-            if total:
-                log.info("pagination annoncée : %s pages", total)
-                rapport["pages_annoncees"] = total
-
-        lots, suivant = parse_listing(html, url, selecteurs)
-        nouveaux = 0
-        for lot in lots:
-            if lot["url"] not in entrees:
-                entrees[lot["url"]] = lot
-                nouveaux += 1
-        log.info("page %d : %d lots (%d nouveaux, %d au total)",
-                 page_num, len(lots), nouveaux, len(entrees))
-
-        if nouveaux == 0:
-            log.info("plus de nouveau lot — fin de la pagination")
-            break
-        if max_lots and len(entrees) >= max_lots:
-            break
-
-        page_num += 1
-        url = suivant or build_listing_url(chemin, statuts, page_num)
-
-    rapport["lots_listes"] = len(entrees)
-
-    # --- 2. fiches détaillées ---------------------------------------------
     faits: list[dict] = []
-    contexte = {"categorie": categorie,
-                "date_collecte": datetime.now().isoformat(timespec="seconds")}
+    vus: set = set()
 
-    liste = list(entrees.values())
-    if max_lots:
-        liste = liste[:max_lots]
+    for categorie_id in categories:
+        libelle = config.CATEGORIES.get(categorie_id, str(categorie_id))
+        log.info("catégorie %s (%s)", libelle, categorie_id)
+        page, total_pages, total_annonce, collectes = 1, None, None, 0
 
-    for index, entree in enumerate(liste, start=1):
-        brut = dict(entree)
-        if avec_detail:
-            html = fetcher.get(entree["url"])
-            if html:
+        taille = taille_page
+        while page <= max_pages:
+            try:
+                produits = client.page_de_lots(categorie_id, statuts, page, taille)
+            except Exception as exc:
+                # Certaines instances Magento plafonnent la taille de page :
+                # on réduit progressivement plutôt que d'abandonner la collecte.
+                if taille > 8:
+                    taille = max(8, taille // 2)
+                    log.warning("  appel refusé (%s) — nouvelle tentative avec "
+                                "%d lots par page", exc, taille)
+                    continue
+                raise
+            rapport["appels_api"] += 1
+
+            items = produits.get("items") or []
+            if total_annonce is None:
+                total_annonce = produits.get("total_count")
+                total_pages = (produits.get("page_info") or {}).get("total_pages")
+                log.info("  %s lots annoncés, %s pages de %d",
+                         total_annonce, total_pages, taille)
+
+            if not items:
+                break
+
+            for item in items:
+                identifiant = item.get("id") or item.get("uid")
+                if identifiant in vus:
+                    continue
+                vus.add(identifiant)
                 try:
-                    brut.update({k: v for k, v in
-                                 parse_detail(html, entree["url"], selecteurs).items()
-                                 if v not in (None, "", [])})
-                    rapport["fiches_lues"] += 1
+                    faits.append(normalize_lot(item, categorie_id, date_collecte))
+                    collectes += 1
                 except Exception as exc:
-                    rapport["fiches_en_echec"] += 1
-                    log.warning("fiche illisible %s (%s)", entree["url"], exc)
-            else:
-                rapport["fiches_en_echec"] += 1
-        faits.append(normalize_lot(brut, contexte))
-        if index % 25 == 0:
-            log.info("fiches traitées : %d / %d", index, len(liste))
+                    rapport["lots_en_erreur"] += 1
+                    log.warning("  lot %s illisible (%s)", identifiant, exc)
+
+            log.info("  page %d/%s — %d lots cumulés (%d %%)", page, total_pages or "?",
+                     len(faits),
+                     round(100 * len(faits) / total_annonce) if total_annonce else 0)
+
+            if max_lots and len(faits) >= max_lots:
+                log.info("  plafond de %d lots atteint", max_lots)
+                break
+            if total_pages and page >= total_pages:
+                break
+            page += 1
+
+        rapport["categories"][libelle] = {
+            "id": categorie_id,
+            "total_annonce": total_annonce,
+            "collectes": collectes,
+            "pages_lues": page,
+            "taille_page_retenue": taille,
+        }
+        if total_annonce and collectes < total_annonce and not max_lots:
+            log.warning("  %s : %d lots collectés sur %d annoncés",
+                        libelle, collectes, total_annonce)
+        if max_lots and len(faits) >= max_lots:
+            break
+
+    if max_lots:
+        faits = faits[:max_lots]
 
     rapport["termine_le"] = datetime.now().isoformat(timespec="seconds")
-    rapport["nb_faits"] = len(faits)
+    rapport["nb_lots"] = len(faits)
     rapport["completude_moyenne"] = (
-        round(sum(f["completude_pct"] for f in faits) / len(faits)) if faits else 0
-    )
+        round(sum(f["completude_pct"] for f in faits) / len(faits)) if faits else 0)
     return faits, rapport

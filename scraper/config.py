@@ -1,68 +1,62 @@
-"""Configuration centrale du scraper Enchères du Domaine.
-
-Tout ce qui est susceptible de bouger côté site (URL, sélecteurs CSS, libellés
-de caractéristiques) est isolé ici ou dans ``selectors.json`` afin de pouvoir
-être corrigé sans toucher au code.
-"""
+"""Configuration du collecteur Enchères du Domaine (API GraphQL Magento)."""
 from __future__ import annotations
 
-import json
+import base64
 import os
 from pathlib import Path
 
 BASE_URL = "https://encheres-domaine.gouv.fr"
+GRAPHQL_URL = f"{BASE_URL}/gateway/magento/graphql/"
 
-# Page de catégorie visée par défaut (véhicules de tourisme, tous statuts utiles).
-DEFAULT_CATEGORY_PATH = "/categorie-de-produit/vehicules/vehicules-de-tourisme.html"
+# Le site envoie ses appels GraphQL en GET avec un en-tête `store`.
+STORE = "default"
 
-# Codes de statut de lot utilisés par le site dans le paramètre `lot_status`.
-# La liste par défaut reprend celle de l'URL fournie (doublons retirés).
-DEFAULT_LOT_STATUS = [13, 14, 15, 1, 2, 3, 6, 8, 11, 19]
-
-# Libellés connus des statuts. Un code inconnu est conservé tel quel.
-LOT_STATUS_LABELS = {
-    1: "À venir",
-    2: "En cours",
-    3: "En cours",
-    6: "Clôture imminente",
-    8: "Adjugé",
-    11: "Terminé",
-    13: "Publié",
-    14: "Ouvert aux enchères",
-    15: "Prolongé",
-    19: "Retiré",
+# Catégories : identifiant Magento -> libellé. L'API attend le `category_uid`,
+# qui est simplement l'identifiant encodé en base64 (5 -> "NQ==").
+CATEGORIES = {
+    5: "Véhicules de tourisme",
+    6: "Véhicules utilitaires",
+    7: "Motos",
+    8: "Scooters",
+    9: "Camions",
+    10: "Remorques",
+    11: "Tracteurs routiers",
+    12: "Ensembles routiers",
+    13: "Véhicules de chantier",
+    14: "Engins agricoles",
+    15: "Transports en commun",
+    16: "Bateaux et navigation",
+    17: "Voiturettes",
+    18: "Quads",
+    19: "Caravaning",
+    20: "Aéronefs",
 }
 
-# Catégories véhicules exposées par le site (utilisable via --category).
-CATEGORY_PATHS = {
-    "vehicules-de-tourisme": "/categorie-de-produit/vehicules/vehicules-de-tourisme.html",
-    "vehicules-utilitaires": "/categorie-de-produit/vehicules/vehicules-utilitaires.html",
-    "poids-lourds": "/categorie-de-produit/vehicules/poids-lourds.html",
-    "deux-roues": "/categorie-de-produit/vehicules/deux-roues.html",
-    "engins": "/categorie-de-produit/vehicules/engins.html",
-}
+CATEGORIE_PARENTE_VEHICULES = 4
+DEFAULT_CATEGORIE = 5
 
-# --- Politesse / robustesse réseau ------------------------------------------
+# Statuts de lot repris de l'URL cible (tous les états utiles à l'analyse).
+DEFAULT_LOT_STATUS = ["13", "14", "15", "1", "2", "3", "6", "8", "11", "19"]
+
+
+def category_uid(categorie_id: int) -> str:
+    """5 -> 'NQ==' (encodage attendu par l'API)."""
+    return base64.b64encode(str(categorie_id).encode()).decode()
+
+
+# --- Politesse réseau -------------------------------------------------------
 USER_AGENT = os.environ.get(
     "SCRAPER_UA",
-    "Mozilla/5.0 (compatible; VeilleEncheresDomaine/1.0; +analyse-decisionnelle)",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/126.0 Safari/537.36",
 )
-REQUEST_TIMEOUT = 30          # secondes
-REQUEST_DELAY = 1.2           # délai minimum entre deux requêtes (s)
-MAX_RETRIES = 4               # nombre de tentatives (backoff exponentiel 2,4,8,16 s)
-MAX_PAGES = 200               # garde-fou pagination
-RESPECT_ROBOTS = True
+REQUEST_TIMEOUT = 45
+REQUEST_DELAY = 0.7        # délai minimum entre deux appels (s)
+MAX_RETRIES = 4            # back-off exponentiel 2, 4, 8, 16 s
+PAGE_SIZE = 100            # lots par appel (le site utilise 8, l'API accepte plus)
+MAX_PAGES = 2000           # garde-fou
 
 # --- Chemins ----------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
-CACHE_DIR = DATA_DIR / "cache"
 PORTAL_DATA_DIR = ROOT / "portal" / "data"
-
-SELECTORS_FILE = Path(__file__).resolve().parent / "selectors.json"
-
-
-def load_selectors() -> dict:
-    """Charge les sélecteurs CSS (fichier éditable sans toucher au code)."""
-    with open(SELECTORS_FILE, "r", encoding="utf-8") as fh:
-        return json.load(fh)
