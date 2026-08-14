@@ -6,4 +6,5 @@ __pycache__/
 .venv/
 data/pages/
 data/lots.json
+!data/historique.json.gz
 data/lots.csv
