@@ -10,17 +10,14 @@ lance donc sans rien installer.
 """
 from __future__ import annotations
 
-import gzip
 import json
 import logging
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
-import zlib
-from http.cookiejar import CookieJar
 
 from . import config
+from . import transport as transport_http
 
 log = logging.getLogger(__name__)
 
@@ -51,24 +48,13 @@ class ApiError(RuntimeError):
     """Erreur renvoyée par l'API GraphQL (message métier, pas réseau)."""
 
 
-def _decompresser(reponse, brut: bytes) -> bytes:
-    encodage = (reponse.headers.get("Content-Encoding") or "").lower()
-    if encodage == "gzip":
-        return gzip.decompress(brut)
-    if encodage == "deflate":
-        return zlib.decompress(brut, -zlib.MAX_WBITS)
-    return brut
-
-
 class DomaineClient:
     """Client HTTP de l'API, poli et tolérant aux pannes passagères."""
 
-    def __init__(self, delay: float = config.REQUEST_DELAY):
+    def __init__(self, delay: float = config.REQUEST_DELAY,
+                 transport: str = "auto"):
         self.delay = delay
         self._last_call = 0.0
-        self.cookies = CookieJar()
-        self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(self.cookies))
         self.entetes = {
             "User-Agent": config.USER_AGENT,
             "Accept": "*/*",
@@ -76,9 +62,10 @@ class DomaineClient:
             "Accept-Encoding": "gzip, deflate",
             "Content-Type": "application/json",
             "store": config.STORE,
-            "Referer": f"{config.BASE_URL}/",
-            "Origin": config.BASE_URL,
+            "x-magento-cache-id": config.MAGENTO_CACHE_ID,
+            "Referer": config.PAGE_CATEGORIE,
         }
+        self.transport = transport_http.creer(self.entetes, transport)
         self._amorce_faite = False
 
     # -- session ------------------------------------------------------------
@@ -89,10 +76,7 @@ class DomaineClient:
             return
         self._amorce_faite = True
         try:
-            requete = urllib.request.Request(config.BASE_URL, headers=self.entetes)
-            with self.opener.open(requete, timeout=config.REQUEST_TIMEOUT):
-                pass
-            log.debug("cookies obtenus : %s", [c.name for c in self.cookies])
+            self.transport.get(config.BASE_URL)
         except Exception as exc:
             log.warning("amorçage de session impossible (%s) — on tente sans", exc)
 
@@ -116,9 +100,7 @@ class DomaineClient:
             if ecoule < self.delay:
                 time.sleep(self.delay - ecoule)
             try:
-                requete = urllib.request.Request(url, headers=self.entetes)
-                with self.opener.open(requete, timeout=config.REQUEST_TIMEOUT) as reponse:
-                    brut = _decompresser(reponse, reponse.read())
+                brut = transport_http.resoudre_challenge(self.transport, url)
                 self._last_call = time.time()
                 charge = json.loads(brut.decode("utf-8"))
                 if charge.get("errors"):
@@ -141,6 +123,18 @@ class DomaineClient:
                 log.warning("HTTP %s — nouvelle tentative dans %.0f s", exc.code, delai)
                 time.sleep(delai)
                 delai *= 2
+            except json.JSONDecodeError:
+                # Contrôle anti-robot non franchi : on repart d'une session
+                # neuve, ce qui suffit dans la grande majorité des cas.
+                self._last_call = time.time()
+                if tentative == config.MAX_RETRIES:
+                    raise RuntimeError(
+                        "le contrôle anti-robot du site n'a pas pu être franchi")
+                log.warning("contrôle anti-robot non franchi — nouvelle session "
+                            "dans %.0f s", delai)
+                time.sleep(delai)
+                self.reamorcer()
+                delai *= 2
             except Exception as exc:
                 self._last_call = time.time()
                 if tentative == config.MAX_RETRIES:
@@ -150,6 +144,13 @@ class DomaineClient:
                 time.sleep(delai)
                 delai *= 2
         return {}
+
+    def reamorcer(self) -> None:
+        """Repart d'une session vierge (nouveaux cookies)."""
+        self.transport.fermer()
+        self.transport = transport_http.creer(self.entetes)
+        self._amorce_faite = False
+        self.amorcer()
 
     # -- requêtes métier ----------------------------------------------------
     def page_de_lots(self, categorie_id: int, statuts: list[str],

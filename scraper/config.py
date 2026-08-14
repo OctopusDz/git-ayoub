@@ -47,11 +47,24 @@ def category_uid(categorie_id: int) -> str:
 # --- Politesse réseau -------------------------------------------------------
 USER_AGENT = os.environ.get(
     "SCRAPER_UA",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/126.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 "
+    "(KHTML, like Gecko) Version/26.5.2 Mobile/15E148 Safari/604.1",
+)
+
+# Le front joint cette empreinte de cache à chaque appel GraphQL. Sans elle,
+# le contrôle anti-robot se réarme bien plus souvent.
+MAGENTO_CACHE_ID = os.environ.get(
+    "SCRAPER_CACHE_ID",
+    "cb2b07ad22d6ee2b9e78ff7f0c8909d8431c0c44534d674aeb571037e597cb18",
+)
+
+# Page de catégorie d'où proviennent les appels : sert de Referer.
+PAGE_CATEGORIE = (
+    BASE_URL + "/categorie-de-produit/vehicules/vehicules-de-tourisme.html"
+    "?lot_status=13%2C14%2C15%2C1%2C2%2C3%2C6%2C8%2C11%2C19&page=1"
 )
 REQUEST_TIMEOUT = 45
-REQUEST_DELAY = 0.7        # délai minimum entre deux appels (s)
+REQUEST_DELAY = 1.5        # délai minimum entre deux appels (s)
 MAX_RETRIES = 4            # back-off exponentiel 2, 4, 8, 16 s
 PAGE_SIZE = 100            # lots par appel (le site utilise 8, l'API accepte plus)
 MAX_PAGES = 2000           # garde-fou
