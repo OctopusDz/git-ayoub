@@ -36,9 +36,38 @@ function options(select, entrees, selection = []) {
   }
 }
 
-function telecharger(nom, contenu, type = "text/csv;charset=utf-8") {
+/* Enregistrement d'un fichier.
+ *
+ * En local, un lien de téléchargement suffit. Sur la page publiée, le
+ * téléchargement passe par le visualiseur, qui demande son accord au lecteur
+ * et n'accepte qu'une liste d'extensions : on retombe sur « .txt » quand le
+ * format tableur n'est pas autorisé, le contenu restant identique. */
+async function telecharger(nom, contenu) {
+  const donnees = "﻿" + contenu;                 // en-tête d'encodage
+  const enregistreur = window.claude?.use
+    ? await window.claude.use("downloads").catch(() => null)
+    : null;
+
+  if (enregistreur) {
+    try {
+      await enregistreur.save({ filename: nom, data: donnees });
+    } catch (erreur) {
+      if (erreur?.code === "extension_not_enabled") {
+        try {
+          await enregistreur.save({
+            filename: nom.replace(/\.csv$/, ".txt"), data: donnees });
+        } catch (repli) {
+          if (repli?.code !== "declined") signaler(repli);
+        }
+      } else if (erreur?.code !== "declined") {
+        signaler(erreur);
+      }
+    }
+    return;
+  }
+
   const lien = document.createElement("a");
-  lien.href = URL.createObjectURL(new Blob(["﻿" + contenu], { type }));
+  lien.href = URL.createObjectURL(new Blob([donnees], { type: "text/csv;charset=utf-8" }));
   lien.download = nom;
   document.body.appendChild(lien);
   lien.click();
@@ -46,8 +75,32 @@ function telecharger(nom, contenu, type = "text/csv;charset=utf-8") {
   setTimeout(() => URL.revokeObjectURL(lien.href), 1000);
 }
 
+function signaler(erreur) {
+  const message = erreur?.code === "too_large"
+    ? "Sélection trop volumineuse pour un export : filtrez davantage."
+    : "L'export n'a pas abouti sur cet appareil.";
+  const bulle = document.createElement("div");
+  bulle.className = "avis";
+  bulle.setAttribute("role", "status");
+  bulle.textContent = message;
+  document.body.appendChild(bulle);
+  setTimeout(() => bulle.remove(), 4000);
+}
+
+/** Masque les boutons d'export là où l'enregistrement est impossible. */
+async function verifierExport() {
+  if (!window.claude?.use) return;                    // usage local : lien direct
+  const enregistreur = await window.claude.use("downloads").catch(() => null);
+  if (enregistreur) return;
+  for (const bouton of [$("#export-croise"), $("#export-lots")]) {
+    if (bouton) bouton.hidden = true;
+  }
+}
+
 /* --------------------------------------------------------------- chargement */
 async function charger() {
+  // Version autonome (page publiée) : le cube est embarqué dans la page.
+  if (window.__CUBE__) return window.__CUBE__;
   try {
     const reponse = await fetch("data/dataset.json", { cache: "no-store" });
     if (!reponse.ok) throw new Error(reponse.status);
@@ -468,8 +521,13 @@ const COLONNES_LOTS = [
   { champ: "statut", libelle: "Statut" },
 ];
 
+function colonnesLots() {
+  return COLONNES_LOTS.filter(
+    (c) => c.type !== "image" || (cube.txt.image && cube.txt.image.some(Boolean)));
+}
+
 function câblerLots() {
-  const triables = COLONNES_LOTS
+  const triables = colonnesLots()
     .filter((c) => c.type !== "image")
     .map((c) => ({ valeur: c.champ, libelle: c.libelle }));
   options($("#tri-lots"), triables, ["prix"]);
@@ -512,7 +570,7 @@ function rendreLots() {
   table.className = "lots";
   const thead = document.createElement("thead");
   const rang = document.createElement("tr");
-  for (const colonne of COLONNES_LOTS) {
+  for (const colonne of colonnesLots()) {
     const th = document.createElement("th");
     th.textContent = colonne.libelle;
     if (colonne.type === "nombre") th.className = "nombre";
@@ -534,7 +592,7 @@ function rendreLots() {
   const tbody = document.createElement("tbody");
   for (const ligne of indices) {
     const tr = document.createElement("tr");
-    for (const colonne of COLONNES_LOTS) {
+    for (const colonne of colonnesLots()) {
       const td = document.createElement("td");
       const valeur = cube.valeur(ligne, colonne.champ);
 
@@ -658,6 +716,7 @@ async function demarrer() {
   câblerLots();
   câblerRapport();
   rafraichirTout();
+  verifierExport();
 
   let redimensionnement;
   window.addEventListener("resize", () => {

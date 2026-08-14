@@ -291,6 +291,13 @@ table.lots .vignette { width: 46px; height: 34px; object-fit: cover; border-radi
 .options-rapport { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
 .options-rapport label { display: inline-flex; align-items: center; gap: 7px; }
 
+.avis {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+  z-index: 120; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--bordure-forte); border-radius: 8px;
+  padding: 10px 16px; box-shadow: var(--ombre); max-width: 90vw;
+}
+
 .message-vide { max-width: 640px; margin: 60px auto; text-align: center; }
 .message-vide code {
   display: block; background: var(--surface-3); border: 1px solid var(--bordure);
@@ -298,11 +305,73 @@ table.lots .vignette { width: 46px; height: 34px; object-fit: cover; border-radi
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
 }
 
+/* --- petit écran ---------------------------------------------------------
+   Sur téléphone la place verticale est la ressource rare : le bandeau se
+   compacte, les indicateurs passent sur deux colonnes, et les tableaux
+   larges gardent leur propre défilement horizontal. */
 @media (max-width: 720px) {
-  .bandeau { flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
-  .filtres { top: auto; position: static; padding: 10px 14px; }
-  main { padding: 14px; }
-  .onglets { width: 100%; overflow-x: auto; }
+  body { font-size: 15px; }
+
+  .bandeau {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 12px;
+    padding: 10px 12px;
+    align-items: center;
+  }
+  .bandeau .titre h1 { font-size: 15px; }
+  .bandeau .titre span { font-size: 11px; line-height: 1.3; }
+  .bandeau .espace { display: none; }
+  /* Le bouton de thème se cale à droite du titre plutôt que de consommer
+     une ligne à lui seul. */
+  #bascule-theme { grid-row: 1; grid-column: 2; padding: 6px 10px; }
+  .onglets {
+    grid-column: 1 / -1;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .onglets::-webkit-scrollbar { display: none; }
+  .onglets button { padding: 8px 12px; font-size: 14px; }
+
+  .filtres {
+    position: static;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .filtres input[type="search"] { grid-column: 1 / -1; min-width: 0; }
+  .filtres select { min-width: 0; }
+  .filtres #valeurs-filtre { grid-column: 1 / -1; }
+  .filtres .compteur { grid-column: 1 / -1; margin-left: 0; font-size: 13px; }
+  .jetons { padding: 0 12px 10px; }
+
+  main { padding: 12px; }
+  .grille-cartes { gap: 12px; grid-template-columns: 1fr; }
+  .carte { padding: 12px; }
+
+  /* Deux indicateurs par ligne : la valeur reste lisible, la page tient. */
+  .indicateurs { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .indicateur { padding: 10px 12px; }
+  .indicateur .libelle { font-size: 11px; line-height: 1.25; }
+  .indicateur .valeur { font-size: 20px; }
+
+  .constructeur { grid-template-columns: 1fr; gap: 10px; }
+  .champ select[multiple] { min-height: 108px; }
+  .croise-cadre, .lots-cadre { max-height: 60vh; }
+  table.croise th, table.croise td { padding: 6px 9px; font-size: 13px; }
+  table.lots th, table.lots td { padding: 7px 9px; font-size: 13px; }
+  .rapport { padding: 14px; }
+  .rapport table th, .rapport table td { padding: 6px 7px; font-size: 12px; }
+  .pagination { flex-wrap: wrap; gap: 8px; }
+  .infobulle { max-width: 78vw; }
+}
+
+@media (max-width: 400px) {
+  .indicateurs { grid-template-columns: 1fr 1fr; }
+  .indicateur .valeur { font-size: 18px; }
 }
 
 @media print {
