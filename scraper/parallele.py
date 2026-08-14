@@ -32,15 +32,8 @@ _local = threading.local()
 
 
 def _entetes() -> dict:
-    return {
-        "User-Agent": config.USER_AGENT,
-        "Accept": "*/*",
-        "Accept-Language": "fr-FR,fr;q=0.9",
-        "Content-Type": "application/json",
-        "store": config.STORE,
-        "x-magento-cache-id": config.MAGENTO_CACHE_ID,
-        "Referer": config.PAGE_CATEGORIE,
-    }
+    """En-têtes du transport ; les valeurs communes viennent de celui-ci."""
+    return {}
 
 
 def _session(renouveler: bool = False):

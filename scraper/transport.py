@@ -1,34 +1,31 @@
 """Transport HTTP du collecteur.
 
-Le site protège son API par un contrôle anti-robot : le premier appel reçoit
-une page ``window.location.href='/redirect_<jeton>/…'``. Demander cette URL à
-jeton renvoie une redirection HTTP vers la réponse JSON — mais pas toujours du
-premier coup : le contrôle se réarme parfois et fournit un nouveau jeton. La
-résolution est donc une boucle, pas un aller-retour.
+Le site protège son API par un contrôle anti-robot : un appel reçoit une page
+``window.location.href='/redirect_<jeton>/…'`` au lieu du JSON. Demander cette
+URL à jeton valide le cookie, après quoi il faut **redemander la ressource**.
 
-Deux transports sont disponibles :
+Deux facteurs décident du taux de réussite, mesurés sur cinq pages :
 
-* **curl** (par défaut) — présent sur macOS, Linux et Windows 10+, il négocie
-  HTTP/2 et maintient la connexion, ce que le contrôle attend ;
-* **urllib** — repli en bibliothèque standard pure, qui résout le challenge
-  moins souvent.
+* **la connexion doit rester ouverte** d'un appel à l'autre. Une session
+  ``requests`` réutilise la connexion TCP/TLS, comme un navigateur ; relancer
+  un processus curl par requête rouvre une poignée de main à chaque fois et se
+  fait refouler bien plus souvent — 5/5 pages contre 2/4 ;
+* **le challenge doit être résolu à chaque appel**, pas seulement à
+  l'amorçage : sans cela, seule la première page passe (1/5).
 
-Aucun paquet Python à installer dans les deux cas.
+``requests`` est donc utilisé quand il est présent, avec repli sur la
+bibliothèque standard — au prix d'un taux de réussite plus faible.
 """
 from __future__ import annotations
 
 import gzip
 import logging
 import re
-import shutil
-import subprocess
-import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
 from http.cookiejar import CookieJar
-from pathlib import Path
 
 from . import config
 
@@ -37,9 +34,21 @@ log = logging.getLogger(__name__)
 REDIRECTION_JS = re.compile(r"window\.location\.href\s*=\s*'([^']+)'")
 MAX_CHALLENGES = 6
 
+# En-têtes d'un navigateur ordinaire. L'absence d'« Origin » est délibérée :
+# sa présence fait basculer le serveur en traitement CORS et le challenge ne
+# se résout plus.
+ENTETES = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "fr-FR,fr;q=0.9",
+    "User-Agent": config.USER_AGENT,
+    "Referer": config.PAGE_CATEGORIE,
+    "store": config.STORE,
+    "x-magento-cache-id": config.MAGENTO_CACHE_ID,
+}
+
 
 class Transport:
-    """Interface commune : ``get(url) -> bytes``."""
+    """Interface commune : ``get(url) -> bytes``, cookies conservés."""
 
     def get(self, url: str) -> bytes:  # pragma: no cover - interface
         raise NotImplementedError
@@ -48,43 +57,31 @@ class Transport:
         pass
 
 
-class TransportCurl(Transport):
-    """Transport adossé à curl, avec bocal à cookies persistant."""
+class TransportRequests(Transport):
+    """Session HTTP persistante — la connexion reste ouverte entre les appels."""
 
     def __init__(self, entetes: dict[str, str]):
-        self.binaire = shutil.which("curl")
-        if not self.binaire:
-            raise RuntimeError("curl est introuvable sur ce système")
-        self.entetes = entetes
-        self._repertoire = tempfile.mkdtemp(prefix="encheres-")
-        self.bocal = str(Path(self._repertoire) / "cookies.txt")
+        try:
+            import requests
+        except ImportError as exc:                       # pragma: no cover
+            raise RuntimeError("requests n'est pas installé") from exc
+        self.session = requests.Session()
+        self.session.headers.update(entetes)
 
     def get(self, url: str) -> bytes:
-        commande = [
-            self.binaire, "-sS", "--compressed", "--location", "--max-redirs", "8",
-            "--max-time", str(config.REQUEST_TIMEOUT),
-            "-b", self.bocal, "-c", self.bocal,
-            "-A", self.entetes.get("User-Agent", config.USER_AGENT),
-        ]
-        for nom, valeur in self.entetes.items():
-            if nom.lower() in ("user-agent", "accept-encoding"):
-                continue                    # déjà couverts par -A et --compressed
-            commande += ["-H", f"{nom}: {valeur}"]
-        commande.append(url)
-
-        resultat = subprocess.run(commande, capture_output=True,
-                                  timeout=config.REQUEST_TIMEOUT + 15)
-        if resultat.returncode != 0:
-            message = resultat.stderr.decode("utf-8", "replace").strip()
-            raise RuntimeError(f"curl a échoué ({resultat.returncode}) : {message}")
-        return resultat.stdout
+        reponse = self.session.get(url, timeout=config.REQUEST_TIMEOUT)
+        reponse.raise_for_status()
+        return reponse.content
 
     def fermer(self) -> None:
-        shutil.rmtree(self._repertoire, ignore_errors=True)
+        try:
+            self.session.close()
+        except Exception:
+            pass
 
 
 class TransportUrllib(Transport):
-    """Repli en bibliothèque standard."""
+    """Repli en bibliothèque standard, sans connexion persistante."""
 
     def __init__(self, entetes: dict[str, str]):
         self.entetes = entetes
@@ -104,29 +101,25 @@ class TransportUrllib(Transport):
         return brut
 
 
-def creer(entetes: dict[str, str], prefere: str = "auto") -> Transport:
-    """Choisit le transport : curl si disponible, urllib sinon."""
-    if prefere in ("auto", "curl"):
+def creer(entetes: dict[str, str] | None = None, prefere: str = "auto") -> Transport:
+    """Choisit le transport : session persistante si possible."""
+    entetes = {**ENTETES, **(entetes or {})}
+    if prefere in ("auto", "requests"):
         try:
-            transport = TransportCurl(entetes)
-            log.debug("transport : curl")
-            return transport
+            return TransportRequests(entetes)
         except RuntimeError as exc:
-            if prefere == "curl":
+            if prefere == "requests":
                 raise
-            log.info("curl indisponible (%s) — repli sur urllib", exc)
-    log.debug("transport : urllib")
+            log.info("requests indisponible (%s) — repli sur urllib, "
+                     "taux de réussite moindre", exc)
     return TransportUrllib(entetes)
 
 
 def amorcer_session(transport: Transport) -> bool:
-    """Valide la session sur la page d'accueil, une fois pour toutes.
+    """Valide la session sur la page d'accueil.
 
-    C'est là que le contrôle anti-robot se joue : la page d'accueil renvoie
-    une redirection JavaScript vers une URL à jeton ; demander cette URL scelle
-    le cookie de la session. Les appels GraphQL passent ensuite directement,
-    sans jamais revoir le contrôle. Le tenter sur l'URL de l'API, au contraire,
-    fait boucler le jeton indéfiniment.
+    Ce premier passage pose les cookies du contrôle anti-robot. Il ne dispense
+    pas de résoudre le challenge sur les appels suivants.
     """
     try:
         corps = transport.get(config.BASE_URL)
@@ -136,12 +129,10 @@ def amorcer_session(transport: Transport) -> bool:
 
     trouve = REDIRECTION_JS.search(corps[:8192].decode("utf-8", "replace"))
     if not trouve:
-        return True                        # aucun contrôle : session déjà bonne
-
-    jeton = urllib.parse.urljoin(config.BASE_URL, trouve.group(1).replace("&amp;", "&"))
+        return True
     try:
-        transport.get(jeton)
-        log.debug("session validée par le jeton de la page d'accueil")
+        transport.get(urllib.parse.urljoin(config.BASE_URL,
+                                           trouve.group(1).replace("&amp;", "&")))
         return True
     except Exception as exc:
         log.warning("validation de session impossible (%s)", exc)
@@ -149,35 +140,21 @@ def amorcer_session(transport: Transport) -> bool:
 
 
 def resoudre_challenge(transport: Transport, url: str) -> bytes:
-    """Demande une URL et déroule le contrôle anti-robot jusqu'au contenu réel.
+    """Demande une URL en franchissant le contrôle anti-robot.
 
-    Le contrôle se déroule en deux temps : la première réponse porte une URL à
-    jeton, et demander cette URL valide le cookie — mais renvoie la page de
-    retour du site, pas la ressource demandée. Il faut alors **redemander
-    l'URL d'origine**, que la session validée sert cette fois normalement.
-
-    Renvoie le corps de la réponse ; à l'appelant de vérifier que c'est bien
-    du JSON exploitable.
+    Le contrôle se déroule en deux temps : la réponse porte une URL à jeton,
+    et demander cette URL valide le cookie — mais renvoie la page de retour du
+    site, pas la ressource. Il faut donc **redemander l'URL d'origine**, que la
+    session validée sert alors normalement.
     """
     corps = transport.get(url)
     for tour in range(MAX_CHALLENGES):
-        tete = corps[:4096].decode("utf-8", "replace")
-        trouve = REDIRECTION_JS.search(tete)
-
-        if trouve:
-            jeton = urllib.parse.urljoin(config.BASE_URL,
-                                         trouve.group(1).replace("&amp;", "&"))
-            log.debug("contrôle anti-robot, tour %d : validation du jeton", tour + 1)
-            transport.get(jeton)          # valide le cookie ; la réponse importe peu
-            corps = transport.get(url)    # la ressource, cette fois-ci
-            continue
-
-        if tete.lstrip()[:1] == "<":
-            # Page HTML sans jeton : la session vient d'être renvoyée à
-            # l'accueil. Une simple nouvelle demande suffit.
-            log.debug("contrôle anti-robot, tour %d : nouvelle demande", tour + 1)
-            corps = transport.get(url)
-            continue
-
-        return corps
+        trouve = REDIRECTION_JS.search(corps[:4096].decode("utf-8", "replace"))
+        if not trouve:
+            return corps
+        jeton = urllib.parse.urljoin(config.BASE_URL,
+                                     trouve.group(1).replace("&amp;", "&"))
+        log.debug("contrôle anti-robot, tour %d", tour + 1)
+        transport.get(jeton)          # valide le cookie
+        corps = transport.get(url)    # la ressource, cette fois
     return corps
