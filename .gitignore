@@ -4,3 +4,6 @@ data/*.sqlite
 __pycache__/
 *.pyc
 .venv/
+data/pages/
+data/lots.json
+data/lots.csv

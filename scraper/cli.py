@@ -59,6 +59,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--har", default=None,
                         help="fichier HAR récent : reprend les cookies d'une "
                              "session de navigation pour passer le contrôle anti-robot")
+    parser.add_argument("--depuis-cache", action="store_true",
+                        help="reconstruit les fichiers à partir des pages déjà "
+                             "collectées, sans aucun appel réseau")
+    parser.add_argument("--pause", type=float, default=1.0,
+                        help="pause supplémentaire entre deux pages (s)")
+    parser.add_argument("--pages-par-session", type=int, default=15,
+                        help="pages avant renouvellement de session")
     parser.add_argument("--sans-cube", action="store_true",
                         help="ne pas construire le cube du portail")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -69,6 +76,14 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s  %(levelname)-7s %(message)s",
         datefmt="%H:%M:%S",
     )
+
+    if args.depuis_cache:
+        from .pipeline import depuis_cache
+        faits, rapport = depuis_cache(_categories(args.categories), args.taille_page)
+        if not faits:
+            logging.error("cache vide — lancez d'abord une collecte")
+            return 1
+        return _ecrire(faits, rapport, Path(args.sortie), args.sans_cube)
 
     client = DomaineClient(delay=args.delai)
     if args.har:
@@ -87,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
             max_pages=args.max_pages,
             max_lots=args.max_lots,
             client=client,
+            pages_par_session=args.pages_par_session,
+            pause_entre_pages=args.pause,
         )
     except Exception as exc:
         logging.error("collecte interrompue : %s", exc)
@@ -96,7 +113,11 @@ def main(argv: list[str] | None = None) -> int:
         logging.error("aucun lot collecté — vérifiez l'accès réseau au site")
         return 1
 
-    sortie = Path(args.sortie)
+    return _ecrire(faits, rapport, Path(args.sortie), args.sans_cube)
+
+
+def _ecrire(faits, rapport, sortie, sans_cube: bool) -> int:
+    """Écrit les fichiers de sortie et affiche le rapport."""
     to_json(faits, sortie / "lots.json", meta=rapport)
     to_csv(faits, sortie / "lots.csv")
     to_sqlite(faits, sortie / "lots.sqlite")
@@ -107,11 +128,14 @@ def main(argv: list[str] | None = None) -> int:
               f"(sur {detail['total_annonce']} annoncés)")
     print(f"  {'total':.<34} {rapport['nb_lots']} lots")
     print(f"  {'appels API':.<34} {rapport['appels_api']}")
+    print(f"  {'pages relues au cache':.<34} {rapport['pages_depuis_cache']}")
+    if rapport["pages_en_echec"]:
+        print(f"  {'pages toujours en échec':.<34} {rapport['pages_en_echec']}")
     print(f"  {'complétude moyenne':.<34} {rapport['completude_moyenne']} %")
     print(f"  {'lots en erreur':.<34} {rapport['lots_en_erreur']}")
     print(f"\nFichiers écrits dans {sortie.resolve()}")
 
-    if not args.sans_cube:
+    if not sans_cube:
         from etl.build_cube import construire
         construire(sortie / "lots.json", config.PORTAL_DATA_DIR / "dataset.json")
         print("Cube du portail mis à jour : portal/data/dataset.json")

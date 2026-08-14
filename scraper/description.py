@@ -23,7 +23,8 @@ ENERGIES = [
     (r"\bessence\b|\bsp\s?9[58]\b", "Essence"),
     (r"hybride\s+rechargeable|\bphev\b", "Hybride rechargeable"),
     (r"\bhybride\b|\bhev\b", "Hybride"),
-    (r"\belectrique\b|\bélectrique\b|\bev\b", "Électrique"),
+    (r"\belectricite\b|\bélectricité\b|\belectrique\b|\bélectrique\b|\bev\b",
+     "Électrique"),
     (r"\bgpl\b", "GPL"),
     (r"\bgnv\b|gaz naturel", "GNV"),
     (r"\bethanol\b|\béthanol\b|\be85\b", "Superéthanol E85"),
@@ -57,7 +58,8 @@ MOTIFS = {
     "type_mines": re.compile(r"\btype\s*:?\s*([A-Z0-9]{6,20})\b", re.I),
     "vin": re.compile(r"n[°ºo]?\s*de\s*s[ée]rie\s*:?\s*([A-HJ-NPR-Z0-9]{11,17})", re.I),
     "mise_en_circulation": re.compile(
-        r"1[èe]?re?\s*mise en circulation\s*:?\s*(\d{1,2}/\d{1,2}/\d{2,4})", re.I),
+        r"1\s*[èe]?re?\s*mise\s+en\s+circulation\s*:?\s*(?:le\s+)?"
+        r"(\d{1,2}/\d{1,2}/\d{2,4}|\d{1,2}/\d{4})", re.I),
     "critair": re.compile(r"crit.?air\s*(\d|e)", re.I),
     "places": re.compile(r"(\d{1,2})\s*places?\b", re.I),
     "portes": re.compile(r"(\d)\s*portes?\b", re.I),
@@ -114,6 +116,8 @@ def _date_iso(brut: str | None) -> str | None:
     if not brut:
         return None
     parties = re.split(r"[/\-.]", brut.strip())
+    if len(parties) == 2:                  # « 03/2015 » : mois et année seuls
+        parties = ["1", *parties]
     if len(parties) != 3:
         return None
     jour, mois, annee = (int(p) for p in parties)

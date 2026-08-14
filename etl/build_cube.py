@@ -205,7 +205,7 @@ def construire(entree: Path = ENTREE_DEFAUT, sortie: Path = SORTIE_DEFAUT) -> Pa
                 dimension["ordre"] = sorted(valeurs)
 
     # --- métadonnées ---------------------------------------------------------
-    dates = sorted(d for d in (lot.get("jour_fin") for lot in lots) if d)
+    dates = sorted((lot.get("date_fin") or "")[:10] for lot in lots if lot.get("date_fin"))
     prix_connus = [lot["prix"] for lot in lots if lot.get("prix") is not None]
 
     meta = {

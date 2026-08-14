@@ -37,6 +37,54 @@ def _lire_cache(chemin: Path) -> list | None:
         return None
 
 
+def depuis_cache(categories: list[int] | None = None,
+                 taille_page: int = config.PAGE_SIZE,
+                 cache: Path | None = None) -> tuple[list[dict], dict]:
+    """Reconstruit les faits à partir des seules pages déjà en cache.
+
+    Aucun appel réseau : utile pour rejouer la normalisation après une
+    correction, ou pour exploiter une collecte encore incomplète.
+    """
+    categories = categories or [config.DEFAULT_CATEGORIE]
+    cache = Path(cache) if cache else config.DATA_DIR / "pages"
+    date_collecte = datetime.now().isoformat(timespec="seconds")
+
+    faits: list[dict] = []
+    vus: set = set()
+    rapport = {"demarre_le": date_collecte, "source": "cache local",
+               "categories": {}, "appels_api": 0, "lots_en_erreur": 0,
+               "pages_depuis_cache": 0, "pages_en_echec": []}
+
+    for categorie_id in categories:
+        libelle = config.CATEGORIES.get(categorie_id, str(categorie_id))
+        fichiers = sorted(cache.glob(f"cat{categorie_id}_t{taille_page}_p*.json"))
+        avant = len(faits)
+        for fichier in fichiers:
+            items = _lire_cache(fichier) or []
+            rapport["pages_depuis_cache"] += 1
+            for item in items:
+                identifiant = item.get("id") or item.get("uid")
+                if identifiant in vus:
+                    continue
+                vus.add(identifiant)
+                try:
+                    faits.append(normalize_lot(item, categorie_id, date_collecte))
+                except Exception as exc:
+                    rapport["lots_en_erreur"] += 1
+                    log.warning("lot %s illisible (%s)", identifiant, exc)
+        rapport["categories"][libelle] = {
+            "id": categorie_id, "total_annonce": None,
+            "collectes": len(faits) - avant, "pages_lues": len(fichiers)}
+        log.info("%s : %d pages en cache, %d lots", libelle, len(fichiers),
+                 len(faits) - avant)
+
+    rapport["termine_le"] = datetime.now().isoformat(timespec="seconds")
+    rapport["nb_lots"] = len(faits)
+    rapport["completude_moyenne"] = (
+        round(sum(f["completude_pct"] for f in faits) / len(faits)) if faits else 0)
+    return faits, rapport
+
+
 def collecter(categories: list[int] | None = None,
               statuts: list[str] | None = None,
               taille_page: int = config.PAGE_SIZE,
@@ -93,6 +141,7 @@ def collecter(categories: list[int] | None = None,
 
         total_annonce = total_pages = None
         depuis_renouvellement = 0
+        echecs_consecutifs = 0
         a_reprendre: list[int] = []
         page = 1
 
@@ -122,13 +171,20 @@ def collecter(categories: list[int] | None = None,
                         log.info("  %s lots annoncés, %s pages de %d",
                                  total_annonce, total_pages, taille_page)
                 except Exception as exc:
-                    log.warning("  page %d en échec (%s) — reprise plus tard", page, exc)
+                    # Le contrôle se durcit quand on insiste : on laisse
+                    # retomber la pression avant de poursuivre.
+                    echecs_consecutifs += 1
+                    repos = min(60, 8 * echecs_consecutifs)
+                    log.warning("  page %d en échec (%s) — reprise plus tard, "
+                                "pause de %d s", page, exc, repos)
                     rapport["pages_en_echec"].append(page)
                     a_reprendre.append(page)
+                    time.sleep(repos)
                     client.reamorcer()
                     depuis_renouvellement = 0
                     page += 1
                     continue
+                echecs_consecutifs = 0
 
             ajoutes = enregistrer(items, categorie_id)
             log.info("  page %d/%s — %d lots cumulés%s", page, total_pages or "?",
@@ -151,6 +207,7 @@ def collecter(categories: list[int] | None = None,
             log.info("  reprise de %d page(s) en échec", len(a_reprendre))
             restantes = []
             for numero in a_reprendre:
+                time.sleep(pause_entre_pages + 5)
                 client.reamorcer()
                 try:
                     produits = client.page_de_lots(categorie_id, statuts,

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="fr" data-theme="">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portail décisionnel — Véhicules du Domaine</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header class="bandeau">
+  <div class="titre">
+    <h1>Véhicules aux enchères du Domaine</h1>
+    <span id="sous-titre">Chargement du cube…</span>
+  </div>
+
+  <nav class="onglets" role="tablist" aria-label="Vues du portail">
+    <button role="tab" aria-selected="true"  data-vue="synthese">Synthèse</button>
+    <button role="tab" aria-selected="false" data-vue="cube">Cube</button>
+    <button role="tab" aria-selected="false" data-vue="graphiques">Graphiques</button>
+    <button role="tab" aria-selected="false" data-vue="lots">Lots</button>
+    <button role="tab" aria-selected="false" data-vue="rapport">Rapport</button>
+  </nav>
+
+  <div class="espace"></div>
+  <button class="bouton" id="bascule-theme" title="Changer de thème" aria-label="Changer de thème">◐</button>
+</header>
+
+<section class="filtres" id="barre-filtres" hidden>
+  <input type="search" id="recherche" placeholder="Rechercher (marque, immat., défaut…)"
+         aria-label="Recherche libre">
+  <select id="ajout-filtre" aria-label="Ajouter un filtre">
+    <option value="">＋ Filtrer sur une dimension…</option>
+  </select>
+  <select id="valeurs-filtre" multiple size="1" hidden aria-label="Valeurs à retenir"></select>
+  <button class="bouton" id="raz-filtres">Tout réinitialiser</button>
+  <span class="compteur"><strong id="nb-selection">0</strong> lots sélectionnés
+    <span id="nb-total"></span></span>
+</section>
+<div class="jetons" id="jetons-filtres"></div>
+
+<main>
+  <!-- ------------------------------------------------------------------ -->
+  <section class="vue active" id="vue-synthese">
+    <div class="indicateurs" id="indicateurs"></div>
+    <div class="grille-cartes">
+      <div class="carte">
+        <header><h2>Marques les plus représentées</h2><span class="note">nombre de lots</span></header>
+        <div id="g-marques"></div>
+      </div>
+      <div class="carte">
+        <header><h2>Prix médian par tranche de kilométrage</h2><span class="note">euros</span></header>
+        <div id="g-km-prix"></div>
+      </div>
+      <div class="carte">
+        <header><h2>Répartition par énergie</h2><span class="note">nombre de lots</span></header>
+        <div id="g-energie"></div>
+      </div>
+      <div class="carte">
+        <header><h2>État signalé des véhicules</h2><span class="note">nombre de lots</span></header>
+        <div id="g-etat"></div>
+      </div>
+      <div class="carte large">
+        <header><h2>Évolution mensuelle des ventes</h2><span class="note">produit total et volume</span></header>
+        <div id="g-temps"></div>
+        <div class="legende" id="l-temps"></div>
+      </div>
+      <div class="carte large">
+        <header><h2>Où sont les véhicules</h2><span class="note">nombre de lots par région</span></header>
+        <div id="g-regions"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="vue" id="vue-cube">
+    <div class="constructeur">
+      <div class="champ">
+        <label for="dim-lignes">Lignes (hiérarchie)</label>
+        <select id="dim-lignes" multiple size="6"></select>
+      </div>
+      <div class="champ">
+        <label for="dim-colonnes">Colonnes (hiérarchie)</label>
+        <select id="dim-colonnes" multiple size="6"></select>
+      </div>
+      <div class="champ">
+        <label for="mesures">Mesures</label>
+        <select id="mesures" multiple size="6"></select>
+      </div>
+      <div class="champ">
+        <label>Affichage</label>
+        <label><input type="checkbox" id="opt-heatmap" checked> Coloration des cellules</label>
+        <label><input type="checkbox" id="opt-soustotaux" checked> Sous-totaux</label>
+        <label>Limiter à <input type="number" id="opt-limite" value="0" min="0" max="200"
+               style="width:64px"> lignes (0 = toutes)</label>
+        <button class="bouton" id="export-croise">Exporter le tableau (CSV)</button>
+      </div>
+    </div>
+    <div id="tableau-croise"></div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="vue" id="vue-graphiques">
+    <div class="constructeur">
+      <div class="champ">
+        <label for="g-dimension">Dimension</label>
+        <select id="g-dimension"></select>
+      </div>
+      <div class="champ">
+        <label for="g-mesure">Mesure</label>
+        <select id="g-mesure"></select>
+      </div>
+      <div class="champ">
+        <label for="g-type">Représentation</label>
+        <select id="g-type">
+          <option value="barresH">Barres horizontales (classement)</option>
+          <option value="barresV">Barres verticales (distribution)</option>
+          <option value="courbe">Courbe (évolution)</option>
+          <option value="empilees">Barres empilées (composition)</option>
+        </select>
+      </div>
+      <div class="champ">
+        <label for="g-serie">Découpage en séries (empilées)</label>
+        <select id="g-serie"></select>
+      </div>
+    </div>
+    <div class="carte large">
+      <header><h2 id="g-titre">Graphique</h2><span class="note" id="g-note"></span></header>
+      <div id="g-principal"></div>
+      <div class="legende" id="g-legende"></div>
+    </div>
+    <div class="carte large">
+      <header>
+        <h2>Kilométrage et prix atteint</h2>
+        <span class="note">un point par lot — au plus trois séries pour rester lisible</span>
+      </header>
+      <div id="g-nuage"></div>
+      <div class="legende" id="l-nuage"></div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="vue" id="vue-lots">
+    <div class="constructeur">
+      <div class="champ">
+        <label for="tri-lots">Trier par</label>
+        <select id="tri-lots"></select>
+      </div>
+      <div class="champ">
+        <label for="sens-lots">Sens</label>
+        <select id="sens-lots">
+          <option value="desc">Décroissant</option>
+          <option value="asc">Croissant</option>
+        </select>
+      </div>
+      <div class="champ">
+        <label>Export</label>
+        <button class="bouton" id="export-lots">Exporter la sélection (CSV)</button>
+      </div>
+    </div>
+    <div id="table-lots"></div>
+    <div class="pagination">
+      <button class="bouton" id="page-precedente">← Précédent</button>
+      <span id="etat-pagination"></span>
+      <button class="bouton" id="page-suivante">Suivant →</button>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="vue" id="vue-rapport">
+    <div class="options-rapport">
+      <label><input type="checkbox" class="section-rapport" value="synthese" checked> Synthèse</label>
+      <label><input type="checkbox" class="section-rapport" value="marques" checked> Par marque</label>
+      <label><input type="checkbox" class="section-rapport" value="geo" checked> Par région</label>
+      <label><input type="checkbox" class="section-rapport" value="temps" checked> Évolution mensuelle</label>
+      <label><input type="checkbox" class="section-rapport" value="etat" checked> État des véhicules</label>
+      <label><input type="checkbox" class="section-rapport" value="affaires" checked> Meilleures affaires</label>
+      <button class="bouton principal" id="imprimer-rapport">Imprimer / PDF</button>
+    </div>
+    <div class="rapport" id="contenu-rapport"></div>
+  </section>
+</main>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

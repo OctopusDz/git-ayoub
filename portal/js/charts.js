@@ -164,8 +164,10 @@ export function barresHorizontales(conteneur, points, options = {}) {
       fill: couleur, rx: 4,
     });
     groupe.append(piste, barre);
+    svg.appendChild(groupe);
 
-    /* Étiquette directe : la valeur est lisible sans passer par l'axe. */
+    /* Étiquette directe, posée après la piste pour rester lisible : la valeur
+       se lit sans passer par l'axe. */
     svg.appendChild(texte(formaterCourt(point.valeur, format), {
       x: margeGauche + largeurBarre + 8, y: y + hauteurBarre / 2 + 4,
       class: "valeur-directe",
@@ -176,7 +178,6 @@ export function barresHorizontales(conteneur, points, options = {}) {
       { libelle: libelleValeur, valeur: formater(point.valeur, format), pastille: couleur },
       ...(point.detail || []),
     ], auClic ? () => auClic(point) : null);
-    svg.appendChild(groupe);
   });
 
   return svg;
