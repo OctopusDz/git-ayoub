@@ -313,8 +313,9 @@ function rendreOpportunites() {
     `${lots.length} ${cible.libelle} en vente sur ${lotsAVenir().length} lots ouverts. `
     + "Les estimations viennent des ventes déjà closes : l'erreur médiane mesurée est "
     + "de 29 % tous véhicules confondus, nettement moindre sur les modèles très "
-    + "représentés. Un prix conseillé n'est pas une garantie — la fiche du lot et "
-    + "l'état réel priment.";
+    + "représentés. Les 11 % de frais de vente sont déjà retranchés de l'enchère "
+    + "maximum conseillée. Un prix conseillé n'est pas une garantie — la fiche du "
+    + "lot et l'état réel priment.";
 
   const zone = $("#opp-liste");
   zone.replaceChildren();
@@ -361,7 +362,9 @@ function carteOpportunite(i) {
   const cases = [
     { libelle: "Mise à prix", valeur: cube.col.mise_a_prix[i], format: "euro" },
     { libelle: "Prix attendu", valeur: cube.col.estimation[i], format: "euro" },
-    { libelle: "Ne pas dépasser", valeur: cube.col.prix_max_conseille[i],
+    { libelle: "Enchère max", valeur: cube.col.prix_max_conseille[i],
+      format: "euro", classe: "plafond" },
+    { libelle: "Coût total, frais compris", valeur: cube.col.cout_total_max[i],
       format: "euro", classe: "plafond" },
     { libelle: "Marge", valeur: cube.col.marge_pct[i], format: "pourcent" },
   ];

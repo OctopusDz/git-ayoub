@@ -21,6 +21,11 @@ from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
 
+# Frais de vente prélevés par la plateforme sur le prix d'adjudication : ils
+# s'ajoutent à l'enchère et doivent donc en être retranchés. Le taux figure
+# dans les descriptifs eux-mêmes (« frais de vente (11%) »).
+TAUX_FRAIS = 0.11
+
 # Effectif minimal pour qu'une médiane de comparables ait un sens.
 MIN_COMPARABLES = 5
 # Effectif à partir duquel on juge l'estimation solide.
@@ -139,8 +144,10 @@ def estimer(lot: dict, historique: list[dict]) -> dict:
     }
 
     if not echantillon:
-        resultat.update(estimation=None, fourchette_basse=None, fourchette_haute=None,
-                        prix_max_conseille=None, confiance="aucune",
+        resultat.update(estimation=None, cout_si_prix_attendu=None,
+                        fourchette_basse=None, fourchette_haute=None,
+                        prix_max_conseille=None, cout_total_max=None,
+                        taux_frais_pct=round(TAUX_FRAIS * 100), confiance="aucune",
                         verdict="Pas de référence", marge_pct=None)
         return resultat
 
@@ -180,7 +187,12 @@ def estimer(lot: dict, historique: list[dict]) -> dict:
     reserve = {"bonne": 0.10, "moyenne": 0.18, "faible": 0.28}[confiance]
     defauts_majeurs = lot.get("nb_defauts_majeurs") or 0
     reserve += min(0.15, 0.05 * defauts_majeurs)     # remise en état à prévoir
-    prix_max = basse * (1 - reserve)
+
+    # Budget que l'opération doit respecter, frais compris.
+    budget_max = basse * (1 - reserve)
+    # L'enchère elle-même doit rester sous ce budget une fois les frais
+    # ajoutés : enchérir « à hauteur du budget » revient à le dépasser de 11 %.
+    prix_max = budget_max / (1 + TAUX_FRAIS)
 
     if mise and prix_max:
         marge = (prix_max - mise) / mise * 100
@@ -197,9 +209,12 @@ def estimer(lot: dict, historique: list[dict]) -> dict:
 
     resultat.update(
         estimation=round(estimation),
+        cout_si_prix_attendu=round(estimation * (1 + TAUX_FRAIS)),
         fourchette_basse=round(basse),
         fourchette_haute=round(haute),
         prix_max_conseille=round(prix_max),
+        cout_total_max=round(prix_max * (1 + TAUX_FRAIS)),
+        taux_frais_pct=round(TAUX_FRAIS * 100),
         confiance=confiance,
         verdict=verdict,
         marge_pct=round(marge) if marge is not None else None,

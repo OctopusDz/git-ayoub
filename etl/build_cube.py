@@ -143,8 +143,8 @@ CHAMPS_NUMERIQUES = [
     "multiple_mise_a_prix", "plus_value_euros", "plus_value_pct",
     "kilometrage", "age", "prix_par_1000km", "km_par_an",
     "nb_defauts", "nb_defauts_majeurs", "completude_pct", "jours_restants",
-    "estimation", "fourchette_basse", "fourchette_haute", "prix_max_conseille",
-    "marge_pct", "nb_comparables",
+    "estimation", "cout_si_prix_attendu", "fourchette_basse", "fourchette_haute",
+    "prix_max_conseille", "cout_total_max", "marge_pct", "nb_comparables",
     "nb_places", "nb_portes", "nb_cles", "duree_vente_heures",
 ]
 

@@ -91,9 +91,10 @@ def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
 
     for lot in faits:
         lot.update({k: v for k, v in estimer(lot, historique).items()
-                    if k in ("estimation", "fourchette_basse", "fourchette_haute",
-                             "prix_max_conseille", "verdict", "confiance",
-                             "marge_pct", "nb_comparables")})
+                    if k in ("estimation", "cout_si_prix_attendu",
+                             "fourchette_basse", "fourchette_haute",
+                             "prix_max_conseille", "cout_total_max", "verdict",
+                             "confiance", "marge_pct", "nb_comparables")})
 
     journal = _lire_journal()
     connus = set(journal.get("lots_connus") or [])
@@ -148,7 +149,8 @@ def resumer(bilan: dict) -> str:
             f"{lot.get('departement') or 'lieu inconnu'}\n"
             f"    mise à prix {lot['mise_a_prix']:.0f} € · "
             f"attendu {lot.get('estimation')} € · "
-            f"ne pas dépasser {lot.get('prix_max_conseille')} € "
+            f"enchère max {lot.get('prix_max_conseille')} € "
+            f"(soit {lot.get('cout_total_max')} € frais de vente compris) "
             f"({lot.get('verdict')}, clôture {(lot.get('date_fin') or '')[:10]})\n"
             f"    {lot.get('url')}")
     return "\n".join(lignes)
