@@ -10,6 +10,7 @@ from datetime import date, datetime, timezone
 
 from . import config
 from . import description as desc
+from . import energie as nrj
 from . import referentiels as ref
 
 # Marques en deux mots : à tester avant le découpage sur le premier espace.
@@ -67,6 +68,12 @@ def normalize_lot(brut: dict, categorie_id: int, date_collecte: str) -> dict:
     infos = desc.analyser((brut.get("short_description") or {}).get("html"),
                           (brut.get("description") or {}).get("html"))
 
+    # Motorisation : le descriptif seul confond hybride essence et hybride
+    # diesel, et déclare « Essence » une Yaris Hybrid. La classification croise
+    # mention explicite, code moteur et modèle.
+    motorisation = nrj.classer(brut.get("name"), infos.get("description"),
+                               infos.get("carburant"))
+
     marque, modele = separer_marque_modele(brut.get("name"))
     lieu = brut.get("dropoff_location") or {}
     code_postal = (lieu.get("postcode") or "").strip() or None
@@ -116,7 +123,11 @@ def normalize_lot(brut: dict, categorie_id: int, date_collecte: str) -> dict:
         "age": age,
         "kilometrage": kilometrage,
         "kilometrage_methode": infos.get("kilometrage_methode"),
-        "carburant": infos.get("carburant"),
+        "carburant": motorisation.get("energie") or infos.get("carburant"),
+        "hybride": motorisation.get("hybride"),
+        "base_hybride": motorisation.get("base_hybride"),
+        "rechargeable": motorisation.get("rechargeable"),
+        "indice_energie": motorisation.get("indice"),
         "boite_vitesses": infos.get("boite_vitesses"),
         "critair": infos.get("critair"),
         "norme_euro": infos.get("norme_euro"),
@@ -193,6 +204,17 @@ def normalize_lot(brut: dict, categorie_id: int, date_collecte: str) -> dict:
     fait["km_par_an"] = (round(kilometrage / age) if kilometrage and age and age >= 1
                          else None)
 
+    # Cohérence du millésime : le service vendeur saisit parfois une date de
+    # première mise en circulation erronée (une Yaris annoncée de 2026 avec
+    # 144 000 km au compteur). Au-delà de 60 000 km par an, la date n'est pas
+    # crédible ; on le signale plutôt que de fausser âge et comparaisons.
+    fait["annee_douteuse"] = bool(
+        kilometrage and age is not None and 0 < age < 2 and kilometrage > 60_000)
+    if fait["annee_douteuse"]:
+        fait["age"] = None
+        fait["tranche_age"] = None
+        fait["km_par_an"] = None
+
     # -- tranches d'analyse -------------------------------------------------------
     fait["tranche_km"] = ref.tranche(kilometrage, ref.TRANCHES_KM)
     fait["tranche_prix"] = ref.tranche(prix, ref.TRANCHES_PRIX)
@@ -236,6 +258,7 @@ CHAMPS_EXPORT = [
     "marque", "modele", "annee", "date_mise_en_circulation", "age",
     "kilometrage", "carburant", "boite_vitesses", "critair", "norme_euro",
     "nb_places", "nb_portes", "nb_cles", "immatriculation", "vin", "type_mines",
+    "hybride", "base_hybride", "rechargeable", "indice_energie", "annee_douteuse",
     "gravite", "nb_defauts", "nb_defauts_majeurs", "sans_cle", "sans_carte_grise",
     "non_roulant", "premiere_main", "controle_technique_mentionne",
     "distribution_faite", "revision_recente", "defauts",

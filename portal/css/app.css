@@ -298,6 +298,35 @@ table.lots .vignette { width: 46px; height: 34px; object-fit: cover; border-radi
   padding: 10px 16px; box-shadow: var(--ombre); max-width: 90vw;
 }
 
+/* --- opportunités ------------------------------------------------------- */
+.avertissement {
+  background: var(--surface-3); border-left: 3px solid var(--attention);
+  border-radius: 6px; padding: 10px 14px; color: var(--text-secondary);
+  margin: 0 0 16px; font-size: 13px;
+}
+.opp { display: grid; gap: 12px; }
+.opp-carte {
+  background: var(--surface-1); border: 1px solid var(--bordure);
+  border-radius: var(--rayon); padding: 14px 16px; box-shadow: var(--ombre);
+  display: grid; gap: 10px;
+}
+.opp-carte.tres-interessant { border-left: 4px solid var(--bon); }
+.opp-carte.interessant { border-left: 4px solid var(--serie-1); }
+.opp-carte.marge-faible { border-left: 4px solid var(--attention); }
+.opp-carte.a-eviter { border-left: 4px solid var(--critique); }
+.opp-tete { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.opp-tete h3 { font-size: 15px; color: var(--text-primary); }
+.opp-tete .echeance { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+.opp-chiffres {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;
+}
+.opp-chiffre { background: var(--surface-3); border-radius: 8px; padding: 8px 10px; }
+.opp-chiffre .libelle { font-size: 11px; color: var(--text-secondary); }
+.opp-chiffre .valeur { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.opp-chiffre.plafond .valeur { color: var(--serie-1); }
+.opp-detail { font-size: 12px; color: var(--text-secondary); }
+.opp-detail a { color: var(--serie-1); }
+
 .message-vide { max-width: 640px; margin: 60px auto; text-align: center; }
 .message-vide code {
   display: block; background: var(--surface-3); border: 1px solid var(--bordure);

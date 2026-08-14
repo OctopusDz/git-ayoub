@@ -15,7 +15,8 @@
   </div>
 
   <nav class="onglets" role="tablist" aria-label="Vues du portail">
-    <button role="tab" aria-selected="true"  data-vue="synthese">Synthèse</button>
+    <button role="tab" aria-selected="true"  data-vue="opportunites">Opportunités</button>
+    <button role="tab" aria-selected="false" data-vue="synthese">Synthèse</button>
     <button role="tab" aria-selected="false" data-vue="cube">Cube</button>
     <button role="tab" aria-selected="false" data-vue="graphiques">Graphiques</button>
     <button role="tab" aria-selected="false" data-vue="lots">Lots</button>
@@ -41,7 +42,36 @@
 
 <main>
   <!-- ------------------------------------------------------------------ -->
-  <section class="vue active" id="vue-synthese">
+  <section class="vue active" id="vue-opportunites">
+    <div class="constructeur">
+      <div class="champ">
+        <label for="opp-cible">Ce que je cherche</label>
+        <select id="opp-cible">
+          <option value="hybride-essence">Hybride essence (hors diesel)</option>
+          <option value="hybride-tout">Tout hybride, y compris diesel</option>
+          <option value="e85">Superéthanol E85</option>
+          <option value="toutes">Toutes les ventes à venir</option>
+        </select>
+      </div>
+      <div class="champ">
+        <label for="opp-tri">Classer par</label>
+        <select id="opp-tri">
+          <option value="marge_pct">Marge sur la mise à prix</option>
+          <option value="prix_max_conseille">Prix maximum conseillé</option>
+          <option value="mise_a_prix">Mise à prix</option>
+          <option value="date_fin">Échéance la plus proche</option>
+        </select>
+      </div>
+      <div class="champ">
+        <label><input type="checkbox" id="opp-roulant" checked> Écarter les non roulants</label>
+        <label><input type="checkbox" id="opp-pro"> Écarter les lots réservés aux professionnels</label>
+      </div>
+    </div>
+    <p class="avertissement" id="opp-avertissement"></p>
+    <div id="opp-liste"></div>
+  </section>
+
+  <section class="vue" id="vue-synthese">
     <div class="indicateurs" id="indicateurs"></div>
     <div class="grille-cartes">
       <div class="carte">

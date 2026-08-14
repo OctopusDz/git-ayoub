@@ -64,6 +64,15 @@ DIMENSIONS = [
      "ordre": ["< 500 €", "500 – 1 000 €", "1 000 – 2 500 €", "2 500 – 5 000 €",
                "5 000 – 10 000 €", "10 000 – 20 000 €", "20 000 € et +"]},
 
+    {"cle": "verdict", "libelle": "Verdict d'enchère", "type": "ordinale", "groupe": "Opportunité",
+     "ordre": ["Très intéressant", "Intéressant", "Marge faible", "À éviter",
+               "Pas de référence", "Mise à prix inconnue"]},
+    {"cle": "confiance", "libelle": "Confiance de l'estimation", "type": "ordinale",
+     "groupe": "Opportunité", "ordre": ["bonne", "moyenne", "faible", "aucune"]},
+    {"cle": "hybride", "libelle": "Hybride", "type": "nominale", "groupe": "Véhicule"},
+    {"cle": "base_hybride", "libelle": "Base de l'hybride", "type": "nominale", "groupe": "Véhicule"},
+    {"cle": "annee_douteuse", "libelle": "Millésime incohérent", "type": "nominale", "groupe": "Véhicule"},
+
     {"cle": "annee_vente", "libelle": "Année de vente", "type": "temps", "groupe": "Temps"},
     {"cle": "trimestre_vente", "libelle": "Trimestre de vente", "type": "temps", "groupe": "Temps"},
     {"cle": "mois_vente", "libelle": "Mois de vente", "type": "temps", "groupe": "Temps"},
@@ -132,6 +141,8 @@ CHAMPS_NUMERIQUES = [
     "multiple_mise_a_prix", "plus_value_euros", "plus_value_pct",
     "kilometrage", "age", "prix_par_1000km", "km_par_an",
     "nb_defauts", "nb_defauts_majeurs", "completude_pct", "jours_restants",
+    "estimation", "fourchette_basse", "fourchette_haute", "prix_max_conseille",
+    "marge_pct", "nb_comparables",
     "nb_places", "nb_portes", "nb_cles", "duree_vente_heures",
 ]
 
@@ -144,9 +155,38 @@ CHAMPS_BOOLEENS = ["a_depasse_mise_a_prix", "non_roulant", "sans_cle",
 # Colonnes de texte libre, affichées dans la table de détail.
 CHAMPS_TEXTE = ["id_lot", "intitule", "url", "image", "sku", "numero_lot",
                 "immatriculation", "vin", "date_fin", "date_debut",
-                "date_mise_en_circulation", "description"]
+                "date_mise_en_circulation", "description", "base_comparables"]
 
 BOOLEENS_LISIBLES = {True: "Oui", False: "Non"}
+
+
+def estimer_ventes_a_venir(lots: list[dict]) -> int:
+    """Attache à chaque vente ouverte son estimation et son conseil d'enchère.
+
+    Les ventes closes servent de référence ; elles ne reçoivent pas
+    d'estimation, leur prix étant connu.
+    """
+    from etl.estimation import estimer, separer
+
+    historique, a_venir = separer(lots)
+    if not historique or not a_venir:
+        return 0
+    for lot in a_venir:
+        resultat = estimer(lot, historique)
+        lot.update({
+            "estimation": resultat["estimation"],
+            "fourchette_basse": resultat["fourchette_basse"],
+            "fourchette_haute": resultat["fourchette_haute"],
+            "prix_max_conseille": resultat["prix_max_conseille"],
+            "verdict": resultat["verdict"],
+            "confiance": resultat["confiance"],
+            "marge_pct": resultat["marge_pct"],
+            "nb_comparables": resultat["nb_comparables"],
+            "base_comparables": resultat["base"],
+        })
+    print(f"  {len(a_venir)} ventes à venir estimées "
+          f"sur {len(historique)} ventes closes")
+    return len(a_venir)
 
 
 def _valeur_dimension(lot: dict, cle: str):
@@ -169,6 +209,8 @@ def construire(entree: Path = ENTREE_DEFAUT, sortie: Path = SORTIE_DEFAUT) -> Pa
     lots = charge["lots"]
     if not lots:
         raise ValueError("aucun lot dans le fichier d'entrée")
+
+    estimer_ventes_a_venir(lots)
 
     dim_valeurs: dict[str, list] = {}
     dim_index: dict[str, dict] = {}

@@ -251,6 +251,175 @@ function afficherJetons() {
   }
 }
 
+
+/* ------------------------------------------------------------ opportunités */
+/* La vue d'achat : pour chaque vente ouverte, ce qu'elle vaut d'après les
+   ventes déjà closes, et jusqu'où il est raisonnable d'enchérir. */
+
+const CIBLES = {
+  "hybride-essence": {
+    libelle: "hybrides essence",
+    retient: (energie) => /^Hybride essence/.test(energie || ""),
+  },
+  "hybride-tout": {
+    libelle: "hybrides, toutes bases",
+    retient: (energie) => /^Hybride/.test(energie || ""),
+  },
+  "e85": {
+    libelle: "superéthanol E85",
+    retient: (energie) => /E85/.test(energie || ""),
+  },
+  toutes: { libelle: "ventes à venir", retient: () => true },
+};
+
+function câblerOpportunites() {
+  ["#opp-cible", "#opp-tri", "#opp-roulant", "#opp-pro"].forEach((s) =>
+    $(s).addEventListener("change", rendreOpportunites));
+}
+
+function lotsAVenir() {
+  const codes = cube.dim.statut || [];
+  const rang = codes.findIndex((v) => /venir/i.test(v));
+  if (rang < 0) return [];
+  const colonne = cube.col.statut;
+  const liste = [];
+  for (let i = 0; i < cube.n; i++) if (colonne[i] === rang) liste.push(i);
+  return liste;
+}
+
+function rendreOpportunites() {
+  const cible = CIBLES[$("#opp-cible").value] || CIBLES.toutes;
+  const tri = $("#opp-tri").value;
+  const ecarterNonRoulants = $("#opp-roulant").checked;
+  const ecarterPro = $("#opp-pro").checked;
+
+  let lots = lotsAVenir().filter((i) => cible.retient(cube.valeur(i, "carburant")));
+  const totalCible = lots.length;
+  if (ecarterNonRoulants) lots = lots.filter((i) => cube.valeur(i, "non_roulant") !== "Oui");
+  if (ecarterPro) lots = lots.filter((i) => cube.valeur(i, "reserve_aux_pros") !== "Oui");
+
+  lots.sort((a, b) => {
+    if (tri === "date_fin") {
+      return String(cube.valeur(a, "date_fin") || "9")
+        .localeCompare(String(cube.valeur(b, "date_fin") || "9"));
+    }
+    return (cube.col[tri]?.[b] ?? -Infinity) - (cube.col[tri]?.[a] ?? -Infinity);
+  });
+
+  const avertissement = $("#opp-avertissement");
+  avertissement.textContent =
+    `${lots.length} ${cible.libelle} en vente sur ${lotsAVenir().length} lots ouverts. `
+    + "Les estimations viennent des ventes déjà closes : l'erreur médiane mesurée est "
+    + "de 29 % tous véhicules confondus, nettement moindre sur les modèles très "
+    + "représentés. Un prix conseillé n'est pas une garantie — la fiche du lot et "
+    + "l'état réel priment.";
+
+  const zone = $("#opp-liste");
+  zone.replaceChildren();
+
+  if (!lots.length) {
+    const vide = document.createElement("p");
+    vide.className = "table-vide";
+    vide.textContent = totalCible
+      ? "Tous les lots correspondants ont été écartés par les cases cochées."
+      : `Aucun ${cible.libelle.replace(/s$/, "")} parmi les ventes ouvertes en ce moment.`;
+    zone.appendChild(vide);
+    return;
+  }
+
+  const liste = document.createElement("div");
+  liste.className = "opp";
+  for (const i of lots) liste.appendChild(carteOpportunite(i));
+  zone.appendChild(liste);
+}
+
+function carteOpportunite(i) {
+  const verdict = cube.valeur(i, "verdict") || "Pas de référence";
+  const carte = document.createElement("article");
+  carte.className = "opp-carte " + verdict.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]+/g, "-");
+
+  const tete = document.createElement("div");
+  tete.className = "opp-tete";
+  const titre = document.createElement("h3");
+  titre.textContent = cube.valeur(i, "intitule") || "Lot sans intitulé";
+  const etiquette = document.createElement("span");
+  etiquette.className = "etiquette " + (
+    verdict === "Très intéressant" ? "bon"
+      : verdict === "À éviter" ? "critique" : "attention");
+  etiquette.textContent = verdict;
+  const echeance = document.createElement("span");
+  echeance.className = "echeance";
+  const fin = cube.valeur(i, "date_fin");
+  echeance.textContent = fin ? "clôture le " + String(fin).slice(0, 10) : "";
+  tete.append(titre, etiquette, echeance);
+
+  const chiffres = document.createElement("div");
+  chiffres.className = "opp-chiffres";
+  const cases = [
+    { libelle: "Mise à prix", valeur: cube.col.mise_a_prix[i], format: "euro" },
+    { libelle: "Prix attendu", valeur: cube.col.estimation[i], format: "euro" },
+    { libelle: "Ne pas dépasser", valeur: cube.col.prix_max_conseille[i],
+      format: "euro", classe: "plafond" },
+    { libelle: "Marge", valeur: cube.col.marge_pct[i], format: "pourcent" },
+  ];
+  for (const c of cases) {
+    const bloc = document.createElement("div");
+    bloc.className = "opp-chiffre" + (c.classe ? " " + c.classe : "");
+    const libelle = document.createElement("div");
+    libelle.className = "libelle";
+    libelle.textContent = c.libelle;
+    const valeur = document.createElement("div");
+    valeur.className = "valeur";
+    valeur.textContent = formater(c.valeur, c.format);
+    bloc.append(libelle, valeur);
+    chiffres.appendChild(bloc);
+  }
+
+  const detail = document.createElement("div");
+  detail.className = "opp-detail";
+  const bas = cube.col.fourchette_basse[i];
+  const haut = cube.col.fourchette_haute[i];
+  const morceaux = [
+    cube.valeur(i, "carburant"),
+    cube.valeur(i, "annee_douteuse") === "Oui"
+      ? "millésime annoncé incohérent" : cube.valeur(i, "annee"),
+    cube.col.kilometrage[i] ? formater(cube.col.kilometrage[i], "km") : "kilométrage inconnu",
+    cube.valeur(i, "gravite"),
+    cube.valeur(i, "departement"),
+    cube.valeur(i, "reserve_aux_pros") === "Oui" ? "réservé aux professionnels" : null,
+  ].filter(Boolean);
+  const ligne1 = document.createElement("div");
+  ligne1.textContent = morceaux.join(" · ");
+  const ligne2 = document.createElement("div");
+  ligne2.textContent = bas && haut
+    ? `Fourchette observée ${formater(bas, "euro")} – ${formater(haut, "euro")}, `
+      + `d'après ${cube.col.nb_comparables[i]} ventes comparables `
+      + `(${cube.valeur(i, "base_comparables")}) — confiance ${cube.valeur(i, "confiance")}.`
+    : "Pas assez de ventes comparables pour estimer ce lot.";
+  detail.append(ligne1, ligne2);
+
+  const description = cube.valeur(i, "description");
+  if (description) {
+    const ligne3 = document.createElement("div");
+    ligne3.textContent = description;
+    detail.appendChild(ligne3);
+  }
+
+  const url = cube.valeur(i, "url");
+  if (url) {
+    const lien = document.createElement("a");
+    lien.href = url;
+    lien.target = "_blank";
+    lien.rel = "noopener noreferrer";
+    lien.textContent = "Voir la fiche du lot →";
+    detail.appendChild(lien);
+  }
+
+  carte.append(tete, chiffres, detail);
+  return carte;
+}
+
 /* ----------------------------------------------------------------- synthèse */
 const INDICATEURS = [
   { mesure: "nb_lots", libelle: "Lots sélectionnés" },
@@ -681,7 +850,8 @@ function rendreRapport() {
 
 /* ------------------------------------------------------------ orchestration */
 function rafraichirVue(nom) {
-  if (nom === "synthese") rendreSynthese();
+  if (nom === "opportunites") rendreOpportunites();
+  else if (nom === "synthese") rendreSynthese();
   else if (nom === "cube") rendreCube();
   else if (nom === "graphiques") rendreGraphiques();
   else if (nom === "lots") rendreLots();
@@ -693,7 +863,7 @@ function rafraichirTout() {
   afficherJetons();
   etatLots.page = 0;
   const active = $$(".onglets button").find((b) => b.getAttribute("aria-selected") === "true");
-  rafraichirVue(active?.dataset.vue || "synthese");
+  rafraichirVue(active?.dataset.vue || "opportunites");
 }
 
 async function demarrer() {
@@ -711,6 +881,7 @@ async function demarrer() {
 
   câblerOnglets();
   câblerFiltres();
+  câblerOpportunites();
   câblerCube();
   câblerGraphiques();
   câblerLots();
