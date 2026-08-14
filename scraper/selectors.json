@@ -1,0 +1,84 @@
+{
+  "_commentaire": "Sélecteurs CSS du site encheres-domaine.gouv.fr. Le parseur essaie chaque sélecteur dans l'ordre et garde le premier qui répond. Si le site évolue, corrigez ce fichier — aucun code à modifier.",
+
+  "liste": {
+    "carte_lot": [
+      "article.lot-card",
+      "div.lot-card",
+      "li.lot",
+      "div.product-miniature",
+      "article[class*='lot']",
+      "div[class*='card-lot']",
+      "div[class*='vignette']"
+    ],
+    "lien_lot": ["a[href*='/lot/']", "a[href*='/hermes/']", "a[href]"],
+    "titre": ["h2", "h3", ".lot-title", ".product-title", "[class*='titre']"],
+    "prix": [".lot-price", ".price", "[class*='prix']", "[class*='enchere-montant']"],
+    "mise_a_prix": ["[class*='mise-a-prix']", "[class*='prix-depart']"],
+    "date_fin": ["time", "[class*='date-fin']", "[class*='cloture']", "[class*='countdown']"],
+    "lieu": ["[class*='lieu']", "[class*='localisation']", "[class*='ville']"],
+    "statut": ["[class*='statut']", "[class*='status']", "[class*='badge']"],
+    "image": ["img"],
+    "pagination_suivant": [
+      "a[rel='next']",
+      "a.next",
+      ".pagination a[aria-label*='uivant']",
+      "li.pagination-next a"
+    ],
+    "pagination_total": [".pagination", "[class*='pagination']", "[class*='nb-resultats']"]
+  },
+
+  "detail": {
+    "titre": ["h1", ".lot-detail-title", "[class*='titre-lot']"],
+    "description": [".lot-description", "[class*='description']", "#description"],
+    "bloc_caracteristiques": [
+      "dl",
+      "table.caracteristiques",
+      "table",
+      "ul[class*='caracteristique']",
+      "div[class*='caracteristique']",
+      "[class*='fiche-technique']"
+    ],
+    "prix_courant": ["[class*='enchere-courante']", "[class*='meilleure-offre']", "[class*='prix-actuel']"],
+    "mise_a_prix": ["[class*='mise-a-prix']", "[class*='prix-depart']"],
+    "nb_encheres": ["[class*='nb-enchere']", "[class*='nombre-enchere']", "[class*='bids']"],
+    "date_debut": ["[class*='date-debut']", "[class*='ouverture']"],
+    "date_fin": ["[class*='date-fin']", "[class*='cloture']", "time"],
+    "lieu": ["[class*='lieu-visite']", "[class*='localisation']", "[class*='adresse']"],
+    "statut": ["[class*='statut']", "[class*='status']"],
+    "images": [".lot-gallery img", "[class*='galerie'] img", "img"]
+  },
+
+  "libelles_caracteristiques": {
+    "marque": ["marque", "constructeur"],
+    "modele": ["modèle", "modele", "type commercial", "version"],
+    "annee": ["année", "annee", "millésime", "millesime"],
+    "date_mise_en_circulation": [
+      "date de 1ère mise en circulation",
+      "date de première mise en circulation",
+      "1ère mise en circulation",
+      "mise en circulation"
+    ],
+    "kilometrage": ["kilométrage", "kilometrage", "km au compteur", "compteur"],
+    "carburant": ["carburant", "énergie", "energie", "motorisation"],
+    "boite_vitesses": ["boîte de vitesses", "boite de vitesses", "transmission", "boîte"],
+    "puissance_fiscale": ["puissance fiscale", "puissance administrative", "cv fiscaux"],
+    "puissance_din": ["puissance din", "puissance réelle", "chevaux din"],
+    "cylindree": ["cylindrée", "cylindree"],
+    "nb_portes": ["nombre de portes", "portes"],
+    "nb_places": ["nombre de places", "places"],
+    "couleur": ["couleur", "coloris"],
+    "immatriculation": ["immatriculation", "numéro d'immatriculation", "plaque"],
+    "vin": ["vin", "numéro de série", "numero de serie", "n° de série"],
+    "controle_technique": ["contrôle technique", "controle technique", "ct"],
+    "etat": ["état", "etat", "état général"],
+    "carte_grise": ["carte grise", "certificat d'immatriculation"],
+    "roulant": ["roulant", "véhicule roulant", "démarre"],
+    "lieu": ["lieu", "lieu de visite", "lieu de retrait", "localisation", "adresse"],
+    "departement": ["département", "departement"],
+    "service_vendeur": ["service vendeur", "vendeur", "direction", "administration"],
+    "mise_a_prix": ["mise à prix", "mise a prix", "prix de départ"],
+    "date_fin": ["date de fin", "fin de la vente", "clôture", "cloture"],
+    "date_debut": ["date de début", "début de la vente", "ouverture"]
+  }
+}

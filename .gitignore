@@ -1,0 +1,6 @@
+# Données collectées et cache réseau
+data/cache/
+data/*.sqlite
+__pycache__/
+*.pyc
+.venv/
