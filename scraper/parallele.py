@@ -74,10 +74,16 @@ def _url(categorie_id: int, statuts: list[str], page: int, taille: int) -> str:
 
 
 def _recuperer_page(categorie_id: int, statuts: list[str], page: int,
-                    taille: int, cache: Path, essais: int) -> tuple[int, list | None, dict]:
-    """Récupère une page. Retourne (numéro, items, page_info)."""
+                    taille: int, cache: Path, essais: int,
+                    forcer: bool = False) -> tuple[int, list | None, dict]:
+    """Récupère une page. Retourne (numéro, items, page_info).
+
+    ``forcer`` court-circuite le cache : utile pour la sonde de démarrage, qui
+    a besoin du nombre total de pages — une information que le cache ne
+    conserve pas.
+    """
     chemin = _fichier_page(cache, categorie_id, taille, page)
-    if chemin.exists():
+    if chemin.exists() and not forcer:
         items = _lire_cache(chemin)
         if items is not None:
             return page, items, {}
@@ -134,20 +140,27 @@ def collecter_parallele(categories: list[int] | None = None,
     for categorie_id in categories:
         libelle = config.CATEGORIES.get(categorie_id, str(categorie_id))
 
-        # Première page : elle donne le nombre total de pages à parcourir.
-        _, items, info = _recuperer_page(categorie_id, statuts, 1, taille_page,
-                                         cache, essais)
-        if items is None:
-            log.error("%s : première page inaccessible", libelle)
-            continue
+        # Le nombre de pages vient du serveur : on interroge des pages
+        # successives jusqu'à en obtenir une fraîche, le contrôle anti-robot
+        # pouvant refuser les premières et le cache ne portant pas ce total.
+        total_pages = total_annonce = None
+        for sonde in range(1, 9):
+            _, _, info = _recuperer_page(categorie_id, statuts, sonde,
+                                         taille_page, cache, essais,
+                                         forcer=True)
+            if info.get("total_pages"):
+                total_pages = info["total_pages"]
+                total_annonce = info.get("total_count")
+                break
 
-        total_pages = info.get("total_pages")
-        total_annonce = info.get("total_count")
-        if not total_pages:                        # page relue depuis le cache
-            _, _, info = _recuperer_page(categorie_id, statuts, 2, taille_page,
-                                         cache, essais)
-            total_pages = info.get("total_pages") or 1
-            total_annonce = info.get("total_count")
+        if not total_pages:
+            if not max_pages:
+                log.error("%s : impossible de connaître le nombre de pages — "
+                          "précisez --max-pages pour lancer quand même", libelle)
+                continue
+            total_pages = max_pages
+            log.warning("%s : nombre de pages inconnu, on s'en tient à %d",
+                        libelle, total_pages)
         if max_pages:
             total_pages = min(total_pages, max_pages)
 
