@@ -104,9 +104,12 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # `enablement` crée le site Pages s'il n'existe pas encore : le dépôt
-      # n'a alors rien à régler à la main dans ses paramètres.
+      # Tente de créer le site Pages s'il n'existe pas encore. GitHub refuse
+      # cette création au jeton du workflow tant que Pages n'a jamais été
+      # activé à la main : l'étape est donc facultative, et c'est le
+      # déploiement qui dira si le réglage manque toujours.
       - uses: actions/configure-pages@v5
+        continue-on-error: true
         with:
           enablement: true
 
