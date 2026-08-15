@@ -9,3 +9,6 @@ data/lots.json
 !data/historique.json.gz
 data/lots.csv
 dist/
+
+# Signal d alerte, éphémère : produit puis consommé par le workflow
+data/alerte.md

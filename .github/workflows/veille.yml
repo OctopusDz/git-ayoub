@@ -23,6 +23,7 @@ permissions:
   contents: write             # pour committer les données collectées
   pages: write                # pour publier sur GitHub Pages
   id-token: write
+  issues: write               # pour l'alerte « nouvel hybride »
 
 # Deux exécutions simultanées se marcheraient sur les pieds au moment du
 # commit : on laisse la plus récente terminer.
@@ -88,6 +89,12 @@ jobs:
           git config user.name "veille-hybrides[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/data/hybrides.json data/suivi.json
+          # La trajectoire des enchères s'accumule passage après passage : elle
+          # n'a de valeur que conservée. Le fichier n'existe qu'une fois des
+          # enchères ouvertes — son absence ne doit pas faire échouer l'étape.
+          if [ -f data/trajectoires.json ]; then
+            git add data/trajectoires.json
+          fi
           if git diff --staged --quiet; then
             echo "aucun changement de données"
             exit 0
@@ -101,6 +108,39 @@ jobs:
             git pull --rebase origin "$GITHUB_REF_NAME" || exit 1
           done
           git push
+
+      # Un hybride ouvert à la fois : sans alerte, il faut penser à ouvrir
+      # l'application. Le fichier n'existe que si un lot jamais vu correspond
+      # aux critères — pas de fichier, pas de mail.
+      - name: Alerte nouvel hybride
+        id: alerte
+        run: |
+          if [ -f data/alerte.md ]; then
+            echo "nouveaute=oui" >> "$GITHUB_OUTPUT"
+            {
+              echo 'corps<<FIN'
+              cat data/alerte.md
+              echo FIN
+            } >> "$GITHUB_OUTPUT"
+            echo "::notice title=Nouvel hybride::$(head -1 data/alerte.md)"
+          else
+            echo "nouveaute=non" >> "$GITHUB_OUTPUT"
+          fi
+
+      # GitHub notifie par mail l'ouverture d'une issue à laquelle on est
+      # abonné : c'est le canal le plus fiable et il ne demande aucun secret
+      # ni service tiers.
+      - name: Prévenir par issue (donc par mail)
+        if: steps.alerte.outputs.nouveaute == 'oui'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CORPS: ${{ steps.alerte.outputs.corps }}
+        run: |
+          titre=$(head -1 data/alerte.md)
+          printf '%s\n' "$CORPS" > /tmp/corps.md
+          gh issue create --title "🚗 $titre" --body-file /tmp/corps.md \
+            --label veille 2>/dev/null \
+            || gh issue create --title "🚗 $titre" --body-file /tmp/corps.md
 
       - name: Récapitulatif
         run: |

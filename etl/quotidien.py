@@ -149,6 +149,95 @@ def enrichir_historique(nouvelles: list[dict],
     return len(ajouts)
 
 
+ALERTE = RACINE / "data" / "alerte.md"
+TRAJECTOIRES = RACINE / "data" / "trajectoires.json"
+
+
+def relever_encheres(faits: list[dict], chemin: Path | None = None) -> int:
+    """Note où en est chaque enchère, pour reconstituer sa montée.
+
+    L'API ne donne que l'enchère courante, jamais l'historique. En la relevant
+    à chaque passage on reconstitue la courbe : c'est le seul moyen de chiffrer
+    ce que tout enchérisseur observe — rien ne bouge pendant des jours, puis
+    tout se joue à la fin. Savoir qu'un lot à J-1 n'est qu'à la moitié de son
+    prix final évite de croire à une affaire qui n'en est pas une.
+
+    Retourne le nombre de relevés ajoutés.
+    """
+    chemin = Path(chemin) if chemin else TRAJECTOIRES
+    suivi = {}
+    if chemin.exists():
+        try:
+            suivi = json.loads(chemin.read_text(encoding="utf-8"))
+        except Exception:
+            suivi = {}
+
+    instant = datetime.now().isoformat(timespec="minutes")
+    ajouts = 0
+    for lot in faits:
+        enchere = lot.get("derniere_enchere")
+        if enchere is None:
+            continue                      # enchères pas encore ouvertes
+        cle = str(lot["id_lot"])
+        releves = suivi.setdefault(cle, {"mise_a_prix": lot.get("mise_a_prix"),
+                                         "date_fin": lot.get("date_fin"),
+                                         "intitule": lot.get("intitule"),
+                                         "releves": []})
+        # Un relevé identique au précédent n'apprend rien : on ne garde que
+        # les changements, et la courbe reste lisible.
+        if releves["releves"] and releves["releves"][-1][1] == enchere:
+            continue
+        releves["releves"].append([instant, enchere])
+        ajouts += 1
+
+    if ajouts:
+        chemin.write_text(json.dumps(suivi, ensure_ascii=False,
+                                     separators=(",", ":")), encoding="utf-8")
+    return ajouts
+
+
+def _ecrire_alerte(lots: list[dict]) -> Path | None:
+    """Écrit le corps du message d'alerte, ou efface le fichier s'il n'y a rien.
+
+    Le fichier sert de signal au workflow : présent, il déclenche l'envoi ;
+    absent, aucun mail ne part. Rien ne s'envoie donc quand rien n'est neuf.
+    """
+    if not lots:
+        ALERTE.unlink(missing_ok=True)
+        return None
+
+    lignes = [f"{len(lots)} hybride(s) essence à saisir", ""]
+    for lot in lots:
+        km = (f"{lot['kilometrage']:,.0f} km".replace(",", " ")
+              if lot.get("kilometrage") else "kilométrage inconnu")
+        fin = (lot.get("date_fin") or "")[:16].replace("T", " à ")
+        lignes += [
+            f"## {lot['intitule']}",
+            "",
+            f"- {lot.get('annee') or 'année inconnue'} · {km} · "
+            f"{lot.get('departement') or 'lieu inconnu'}",
+            f"- État : {lot.get('gravite') or '—'}",
+            f"- Mise à prix : **{lot['mise_a_prix']:.0f} €**",
+            f"- Prix attendu : {lot.get('estimation')} € "
+            f"(fourchette {lot.get('fourchette_basse')} – {lot.get('fourchette_haute')} €)",
+            f"- **Enchère maximum : {lot.get('prix_max_conseille')} €** "
+            f"— soit {lot.get('cout_total_max')} € tout compris",
+            f"- Clôture : {fin}",
+            f"- {lot.get('url')}",
+            "",
+        ]
+        if lot.get("reserve_aux_pros"):
+            lignes += ["> Réservé aux professionnels : moins de concurrence, "
+                       "et 2 055 € de moins à véhicule comparable.", ""]
+        if lot.get("frais_incertains"):
+            lignes += ["> Frais de garde annoncés sans montant : le coût total "
+                       "affiché est un plancher.", ""]
+
+    lignes += ["---", "", "https://octopusdz.github.io/git-ayoub/"]
+    ALERTE.write_text("\n".join(lignes), encoding="utf-8")
+    return ALERTE
+
+
 def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
     """Collecte les ventes ouvertes, les estime, reconstruit portail et page.
 
@@ -203,6 +292,19 @@ def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
 
     a_retenir = sorted([l for l in faits if interessant(l)],
                        key=lambda l: -(l.get("marge_pct") or 0))
+
+    # Il n'y a qu'un hybride ouvert à la fois : sans alerte, il faut penser à
+    # ouvrir l'application tous les jours. Seuls les lots jamais vus déclenchent
+    # un envoi — sinon l'alerte se répéterait deux fois par jour et on
+    # cesserait de la lire.
+    alertes = [l for l in a_retenir if l["id_lot"] not in connus]
+    _ecrire_alerte(alertes)
+
+    # Relevé des enchères en cours : la courbe se construit passage après
+    # passage, elle ne dira quelque chose qu'après plusieurs ventes.
+    releves = relever_encheres(faits)
+    if releves:
+        print(f"  {releves} enchère(s) relevée(s)")
 
     # L'application réunit historique et ventes ouvertes : les ventes closes
     # servent de référence de prix, les ventes à venir portent la décision.
