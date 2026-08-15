@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<title>Hybrides — enchères du Domaine</title>
+<title>Hybrides du Domaine</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Les véhicules hybrides aux enchères du Domaine : estimation, plafond d'enchère et coût de revient complet.">
 <link rel="manifest" href="manifest.webmanifest">
@@ -958,6 +958,17 @@ async function charger() {
     dejaVus = new Set(JSON.parse(localStorage.getItem(CLE_VUS) || "[]"));
   } catch { dejaVus = new Set(); }
 
+  // Une version autonome de la page embarque ses données : elle s'ouvre alors
+  // sans serveur, utile pour un aperçu ou une consultation hors ligne.
+  const embarquees = document.getElementById("donnees-embarquees");
+  if (embarquees) {
+    DONNEES = JSON.parse(embarquees.textContent);
+    afficherEnTete();
+    rendre();
+    memoriserVus();
+    return;
+  }
+
   try {
     // `cache: no-cache` revalide auprès du serveur : ouvrir l'app le matin
     // suffit à récupérer la collecte de la nuit.
@@ -971,16 +982,22 @@ async function charger() {
     return;
   }
 
+  afficherEnTete();
+  rendre();
+  memoriserVus();
+}
+
+function afficherEnTete() {
   const m = DONNEES.meta;
   const fiab = m.fiabilite && m.fiabilite.mesurable
     ? ` · fiabilité ±${m.fiabilite.erreur_mediane_pct} %` : "";
   $("#fraicheur").textContent =
     `${m.nb_hybrides} hybrides · collecte du ${jourFr(m.genere_le)}${fiab}`;
+}
 
-  rendre();
-
-  // Les lots à venir vus aujourd'hui ne seront plus « nouveaux » demain. La
-  // mémorisation attend quelques secondes : le temps de les avoir vraiment vus.
+// Les lots à venir vus aujourd'hui ne seront plus « nouveaux » demain. La
+// mémorisation attend quelques secondes : le temps de les avoir vraiment vus.
+function memoriserVus() {
   setTimeout(() => {
     const ids = DONNEES.lots.filter(l => l.a_venir).map(l => l.id_lot);
     localStorage.setItem(CLE_VUS, JSON.stringify([...new Set([...dejaVus, ...ids])]));
