@@ -90,10 +90,17 @@ jobs:
           git add app/data/hybrides.json data/suivi.json
           if git diff --staged --quiet; then
             echo "aucun changement de données"
-          else
-            git commit -m "Veille : collecte du $(date -u +%Y-%m-%d\ %H:%M) UTC"
-            git push
+            exit 0
           fi
+          git commit -m "Veille : collecte du $(date -u +%Y-%m-%d\ %H:%M) UTC"
+          # Une collecte lancée à la main pendant qu'une autre tourne pousserait
+          # sur un dépôt qui a bougé. On se replace au-dessus avant d'insister.
+          for essai in 1 2 3; do
+            git push && exit 0
+            echo "poussée refusée, on se rebase et on réessaie ($essai/3)"
+            git pull --rebase origin "$GITHUB_REF_NAME" || exit 1
+          done
+          git push
 
       - name: Récapitulatif
         run: |
