@@ -31,9 +31,10 @@ JOURNAL = RACINE / "data" / "suivi.json"
 log = logging.getLogger(__name__)
 
 
-def figer(source: Path = LOTS, destination: Path = HISTORIQUE) -> Path:
+def figer(source: Path | None = None, destination: Path | None = None) -> Path:
     """Fige les ventes closes en référence compressée et durable."""
-    lots = json.loads(Path(source).read_text(encoding="utf-8"))["lots"]
+    source, destination = Path(source or LOTS), Path(destination or HISTORIQUE)
+    lots = json.loads(source.read_text(encoding="utf-8"))["lots"]
     # Les invendus font partie de l'historique : ils disent ce qui ne trouve
     # pas preneur, information aussi utile que les prix atteints.
     closes = [l for l in lots if l.get("statut") != "Vente à venir"]
@@ -51,8 +52,9 @@ def figer(source: Path = LOTS, destination: Path = HISTORIQUE) -> Path:
     return destination
 
 
-def charger_historique(chemin: Path = HISTORIQUE) -> list[dict]:
-    if not Path(chemin).exists():
+def charger_historique(chemin: Path | None = None) -> list[dict]:
+    chemin = Path(chemin) if chemin else HISTORIQUE
+    if not chemin.exists():
         raise FileNotFoundError(
             f"{chemin} est introuvable. Lancez d'abord : python3 -m etl.quotidien figer")
     with gzip.open(chemin, "rt", encoding="utf-8") as fh:
@@ -65,7 +67,86 @@ def _lire_journal() -> dict:
             return json.loads(JOURNAL.read_text(encoding="utf-8"))
         except Exception:
             pass
-    return {"lots_connus": [], "historique_des_jours": []}
+    return {"lots_connus": [], "lots_ouverts": [], "historique_des_jours": []}
+
+
+# Statuts d'un lot dont la vente est terminée, adjugée ou non.
+STATUTS_CLOS = ["1", "2", "3", "8"]
+# Pages de ventes closes lues par passage, les plus récentes d'abord. Trois
+# pages couvrent 300 clôtures : très au-delà d'une journée ordinaire.
+PAGES_CLOSES = 3
+# Jusqu'où insister quand des lots attendus manquent encore à l'appel.
+PAGES_CLOSES_MAX = 12
+
+
+def recuperer_closes(attendus: set, fils: int = 8) -> list[dict]:
+    """Va chercher le résultat des ventes qui viennent de se clore.
+
+    Recollecter les 10 000 ventes passées à chaque réveil n'aurait pas de sens :
+    elles ne bougent plus. On ne cherche donc que les lots qui étaient en vente
+    hier et ne le sont plus — on connaît leur identifiant — en lisant les
+    ventes closes de la plus récente à la plus ancienne, et en s'arrêtant dès
+    qu'ils sont tous retrouvés.
+    """
+    from scraper import config
+    from scraper.parallele import collecter_parallele
+
+    if not attendus:
+        return []
+
+    pages, trouves = PAGES_CLOSES, {}
+    while True:
+        faits, _ = collecter_parallele(
+            categories=[config.DEFAULT_CATEGORIE], statuts=STATUTS_CLOS,
+            taille_page=100, fils=fils, max_pages=pages,
+            sens="DESC", forcer=True)
+        trouves = {l["id_lot"]: l for l in faits if l["id_lot"] in attendus}
+        manquants = attendus - set(trouves)
+        if not manquants or pages >= PAGES_CLOSES_MAX:
+            if manquants:
+                # Sans doute des lots clos depuis longtemps, ou retirés de la
+                # vente. Les poursuivre coûterait plus que ce qu'ils apportent.
+                log.warning("%d lot(s) clos introuvables, abandonnés : %s",
+                            len(manquants), sorted(manquants)[:5])
+            break
+        pages = min(pages * 2, PAGES_CLOSES_MAX)
+
+    log.info("  %d vente(s) close(s) récupérée(s) sur %d attendue(s)",
+             len(trouves), len(attendus))
+    return list(trouves.values())
+
+
+def enrichir_historique(nouvelles: list[dict],
+                        chemin: Path | None = None) -> int:
+    """Ajoute des ventes closes au référentiel figé. Retourne le nombre ajouté.
+
+    C'est ce qui fait vivre l'outil : chaque vente terminée devient une
+    référence de prix pour estimer les suivantes.
+
+    Le chemin est résolu à l'appel et non à la définition : une valeur par
+    défaut figée pointerait toujours sur le vrai fichier, y compris quand un
+    test croit l'avoir détourné.
+    """
+    if not nouvelles:
+        return 0
+
+    chemin = Path(chemin) if chemin else HISTORIQUE
+    lots = charger_historique(chemin)
+    connus = {l["id_lot"] for l in lots}
+    ajouts = [l for l in nouvelles if l["id_lot"] not in connus]
+    if not ajouts:
+        return 0
+
+    lots.extend(ajouts)
+    charge = {
+        "fige_le": datetime.now().isoformat(timespec="seconds"),
+        "nb_ventes_closes": len(lots),
+        "dont_adjugees": sum(1 for l in lots if l.get("prix")),
+        "lots": lots,
+    }
+    with gzip.open(chemin, "wt", encoding="utf-8") as fh:
+        json.dump(charge, fh, ensure_ascii=False, separators=(",", ":"))
+    return len(ajouts)
 
 
 def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
@@ -88,6 +169,20 @@ def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
     if not faits:
         raise RuntimeError("aucune vente ouverte collectée")
 
+    journal = _lire_journal()
+
+    # Les lots qui étaient en vente au dernier passage et qui n'y sont plus
+    # viennent d'être adjugés — ou sont restés invendus. Leur résultat est
+    # exactement ce dont l'estimation a besoin pour rester à jour.
+    ouverts_avant = set(journal.get("lots_ouverts") or [])
+    disparus = ouverts_avant - {l["id_lot"] for l in faits}
+    closes = recuperer_closes(disparus, fils=fils)
+    ajoutes = enrichir_historique(closes)
+    if ajoutes:
+        historique = charger_historique()
+        print(f"  {ajoutes} vente(s) close(s) ajoutée(s) au référentiel "
+              f"({len(historique)} au total)")
+
     for lot in faits:
         lot.update({k: v for k, v in estimer(lot, historique).items()
                     if k in ("estimation", "cout_si_prix_attendu",
@@ -95,7 +190,6 @@ def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
                              "prix_max_conseille", "cout_total_max", "verdict",
                              "confiance", "marge_pct", "nb_comparables")})
 
-    journal = _lire_journal()
     connus = set(journal.get("lots_connus") or [])
     nouveaux = [l for l in faits if l["id_lot"] not in connus]
 
@@ -118,10 +212,14 @@ def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
     construire_app(LOTS)
 
     journal["lots_connus"] = sorted({l["id_lot"] for l in faits} | connus)
+    # Photographie des lots en vente : c'est la comparaison avec celle du
+    # prochain passage qui révélera les ventes closes entre-temps.
+    journal["lots_ouverts"] = sorted(l["id_lot"] for l in faits)
     journal["historique_des_jours"] = (journal.get("historique_des_jours") or [])[-59:] + [{
         "jour": date.today().isoformat(),
         "ventes_ouvertes": len(faits),
         "nouveaux_lots": len(nouveaux),
+        "closes_ajoutees": ajoutes,
         "a_retenir": len(a_retenir),
     }]
     JOURNAL.write_text(json.dumps(journal, ensure_ascii=False, indent=1), encoding="utf-8")

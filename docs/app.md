@@ -42,6 +42,24 @@ d'accueil*.
 > passer le dépôt en public — les données publiées ne sont que des annonces
 > déjà publiques.
 
+## Le cycle de vie d'une vente
+
+Une annonce apparaît → la collecte suivante la trouve, l'estime, et l'affiche
+dans « À vendre » avec le badge *nouveau*.
+
+Elle est adjugée → au passage suivant, le lot a disparu des ventes ouvertes.
+Son identifiant était mémorisé dans `data/suivi.json` : le collecteur va donc
+chercher son résultat parmi les ventes closes, lues de la plus récente à la
+plus ancienne, et s'arrête dès que tous les disparus sont retrouvés. En
+pratique une à trois pages, quelques secondes.
+
+Le lot rejoint alors `data/historique.json.gz` et devient une référence de prix
+pour estimer les suivants. Le référentiel grossit donc tout seul, et les
+estimations s'appuient sur des ventes de plus en plus fraîches.
+
+Recollecter les 9 000 ventes closes à chaque réveil serait absurde — elles ne
+bougent plus. C'est pourquoi seule leur frange récente est relue.
+
 ## Ce que l'application calcule
 
 **Prix attendu.** Les ventes closes qui ressemblent au lot (même modèle, âge et

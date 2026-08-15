@@ -49,11 +49,12 @@ def _session(renouveler: bool = False):
     return transport
 
 
-def _url(categorie_id: int, statuts: list[str], page: int, taille: int) -> str:
+def _url(categorie_id: int, statuts: list[str], page: int, taille: int,
+         sens: str = "ASC") -> str:
     variables = {
         "currentPage": page,
         "pageSize": taille,
-        "sort": {"start_auction_lot_at": "ASC"},
+        "sort": {"start_auction_lot_at": sens},
         "filter": {
             "category_uid": {"eq": config.category_uid(categorie_id)},
             "lot_status": {"in": list(statuts)},
@@ -68,12 +69,13 @@ def _url(categorie_id: int, statuts: list[str], page: int, taille: int) -> str:
 
 def _recuperer_page(categorie_id: int, statuts: list[str], page: int,
                     taille: int, cache: Path, essais: int,
-                    forcer: bool = False) -> tuple[int, list | None, dict]:
+                    forcer: bool = False, sens: str = "ASC") -> tuple[int, list | None, dict]:
     """Récupère une page. Retourne (numéro, items, page_info).
 
     ``forcer`` court-circuite le cache : utile pour la sonde de démarrage, qui
     a besoin du nombre total de pages — une information que le cache ne
-    conserve pas.
+    conserve pas — et pour les ventes fraîchement closes, dont l'intérêt est
+    précisément d'être à jour.
     """
     chemin = _fichier_page(cache, categorie_id, taille, page, statuts)
     if chemin.exists() and not forcer:
@@ -85,7 +87,7 @@ def _recuperer_page(categorie_id: int, statuts: list[str], page: int,
         transport = _session(renouveler=essai > 0)
         try:
             corps = transport_http.resoudre_challenge(
-                transport, _url(categorie_id, statuts, page, taille))
+                transport, _url(categorie_id, statuts, page, taille, sens))
             charge = json.loads(corps.decode("utf-8"))
             produits = (charge.get("data") or {}).get("products") or {}
             items = produits.get("items")
@@ -108,8 +110,15 @@ def collecter_parallele(categories: list[int] | None = None,
                         fils: int = 12,
                         essais: int = 3,
                         max_pages: int | None = None,
-                        cache: Path | None = None) -> tuple[list[dict], dict]:
-    """Collecte plusieurs pages de front. Retourne ``(faits, rapport)``."""
+                        cache: Path | None = None,
+                        sens: str = "ASC",
+                        forcer: bool = False) -> tuple[list[dict], dict]:
+    """Collecte plusieurs pages de front. Retourne ``(faits, rapport)``.
+
+    ``sens`` inverse l'ordre du tri : ``DESC`` place les mises en vente les
+    plus récentes en tête, ce qui permet de ne lire que les premières pages
+    quand on ne cherche que l'actualité. ``forcer`` ignore le cache.
+    """
     categories = categories or [config.DEFAULT_CATEGORIE]
     statuts = statuts or config.DEFAULT_LOT_STATUS
     cache = Path(cache) if cache else config.DATA_DIR / "pages"
@@ -140,7 +149,7 @@ def collecter_parallele(categories: list[int] | None = None,
         for sonde in range(1, 9):
             _, _, info = _recuperer_page(categorie_id, statuts, sonde,
                                          taille_page, cache, essais,
-                                         forcer=True)
+                                         forcer=True, sens=sens)
             if info.get("total_pages"):
                 total_pages = info["total_pages"]
                 total_annonce = info.get("total_count")
@@ -168,7 +177,7 @@ def collecter_parallele(categories: list[int] | None = None,
         with ThreadPoolExecutor(max_workers=fils) as pool:
             travaux = {
                 pool.submit(_recuperer_page, categorie_id, statuts, page,
-                            taille_page, cache, essais): page
+                            taille_page, cache, essais, forcer, sens): page
                 for page in pages
             }
             faits_recus = 0
