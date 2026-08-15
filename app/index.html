@@ -155,6 +155,37 @@ button { cursor: pointer; }
   font-size: 11px; font-weight: 700; padding: 1px 6px;
 }
 
+.rangee-tri {
+  display: flex; align-items: center; gap: 8px; padding-bottom: 10px;
+}
+.rangee-tri label {
+  font-size: 11px; font-weight: 620; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.04em; flex: none;
+}
+.rangee-tri select {
+  flex: 1; min-width: 0; border: 1px solid var(--bordure-forte);
+  background: var(--surface-2); border-radius: 10px; padding: 8px 10px;
+  font-size: 13.5px; -webkit-appearance: none;
+}
+
+/* Confirmation passagère d'une action — rafraîchissement, surtout. */
+.avis {
+  position: fixed; left: 12px; right: 12px; bottom: calc(16px + var(--sous-encoche));
+  z-index: 70; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--bordure-forte); border-radius: 12px;
+  padding: 12px 14px; box-shadow: var(--ombre); font-size: 13.5px;
+  opacity: 0; transform: translateY(8px); pointer-events: none;
+  transition: opacity .18s, transform .18s;
+}
+.avis.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.avis a { color: var(--accent); font-weight: 600; }
+.icone-bouton.tourne { animation: tourner .8s linear infinite; }
+@keyframes tourner { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .icone-bouton.tourne { animation: none; }
+  .feuille, .avis { transition: none; }
+}
+
 /* --- liste ---------------------------------------------------------------- */
 main { padding: 14px; max-width: 760px; margin: 0 auto; }
 .compte-resultats {
@@ -214,10 +245,19 @@ main { padding: 14px; max-width: 760px; margin: 0 auto; }
 .pied-carte {
   display: flex; align-items: center; gap: 7px; font-size: 12px;
   color: var(--text-muted); border-top: 1px solid var(--grille);
-  padding: 9px 14px; background: var(--surface-1);
+  padding: 7px 8px 7px 14px; background: var(--surface-1);
   white-space: nowrap; overflow: hidden;
 }
 .pied-carte .urgent { color: var(--critique); font-weight: 600; }
+.pied-carte .bouton-detail {
+  margin-left: auto; flex: none; border: 1px solid var(--bordure-forte);
+  background: var(--surface-1); border-radius: 8px; padding: 6px 12px;
+  font-size: 12.5px; font-weight: 550; color: var(--text-primary);
+}
+.carte-lien { text-decoration: none; color: inherit; }
+.carte-lien .carte-titre h2::after {
+  content: " ↗"; color: var(--text-muted); font-weight: 400; font-size: 12px;
+}
 
 .vide { text-align: center; color: var(--text-muted); padding: 50px 20px; }
 .vide .grand { font-size: 34px; margin-bottom: 10px; }
@@ -350,6 +390,7 @@ table.comparables td.prix { font-weight: 620; }
       <div class="fraicheur" id="fraicheur">chargement…</div>
     </div>
     <div class="espace"></div>
+    <button class="icone-bouton" id="rafraichir" aria-label="Récupérer les données">⟳</button>
     <button class="icone-bouton" id="bascule-theme" aria-label="Changer de thème">◐</button>
   </div>
 
@@ -364,6 +405,11 @@ table.comparables td.prix { font-weight: 620; }
     <button class="bouton-filtres" id="ouvrir-filtres">
       Filtres <span class="pastille-compte" id="compte-filtres" hidden>0</span>
     </button>
+  </div>
+
+  <div class="rangee-tri">
+    <label for="tri">Trier</label>
+    <select id="tri" aria-label="Trier les véhicules"></select>
   </div>
 </header>
 
@@ -535,6 +581,77 @@ const FILTRES = [
   },
 ];
 
+/* ---------------------------------------------------------------------------
+ * Tris
+ *
+ * `valeur(lot)` donne une clé numérique croissante — la plus petite d'abord.
+ * Un lot dépourvu de l'information part en fin de liste plutôt que de polluer
+ * la tête du classement.
+ * ------------------------------------------------------------------------ */
+const LOIN = Number.POSITIVE_INFINITY;
+
+const TRIS = [
+  { cle: "naturel", libelle: "Ordre naturel" },
+  {
+    cle: "affaire", libelle: "Meilleures affaires (× et prix bas)",
+    // Deux critères que rien ne permet de convertir l'un dans l'autre : un
+    // multiple n'est pas des euros. On classe donc sur la somme des deux
+    // rangs, ce qui ne suppose aucun taux de change entre eux.
+    composite: [l => l.multiple_mise_a_prix ?? LOIN, l => l.prix ?? LOIN],
+  },
+  { cle: "multiple", libelle: "Multiple le plus faible (×)",
+    valeur: l => l.multiple_mise_a_prix ?? LOIN },
+  { cle: "prix", libelle: "Prix de vente le plus bas",
+    valeur: l => l.prix ?? LOIN },
+  { cle: "mise", libelle: "Mise à prix la plus basse",
+    valeur: l => l.mise_a_prix ?? LOIN },
+  { cle: "cloture", libelle: "Clôture la plus proche",
+    valeur: l => l.jours_restants ?? LOIN },
+  { cle: "plafond", libelle: "Enchère max la plus élevée",
+    valeur: l => l.prix_max_conseille == null ? LOIN : -l.prix_max_conseille },
+  { cle: "marge", libelle: "Marge la plus forte",
+    valeur: l => l.marge_pct == null ? LOIN : -l.marge_pct },
+  { cle: "km", libelle: "Kilométrage le plus bas",
+    valeur: l => l.kilometrage ?? LOIN },
+  { cle: "recent", libelle: "Véhicule le plus récent",
+    valeur: l => l.annee == null ? LOIN : -l.annee },
+];
+
+let tri = "naturel";
+
+/** Rang de chaque lot pour un critère, les ex æquo partageant leur rang. */
+function rangs(lots, critere) {
+  const ordonnes = [...lots].sort((a, b) => critere(a) - critere(b));
+  const table = new Map();
+  ordonnes.forEach((l, i) => table.set(l, i));
+  return table;
+}
+
+function trier(lots) {
+  const regle = TRIS.find(t => t.cle === tri);
+
+  if (regle && regle.composite) {
+    const tables = regle.composite.map(critere => rangs(lots, critere));
+    // Un lot sans prix ni multiple n'a rien à faire dans un classement
+    // d'affaires : il passe derrière.
+    const score = l => regle.composite.some(c => c(l) === LOIN)
+      ? LOIN : tables.reduce((somme, t) => somme + t.get(l), 0);
+    return [...lots].sort((a, b) => score(a) - score(b));
+  }
+
+  if (regle && regle.valeur) {
+    return [...lots].sort((a, b) => regle.valeur(a) - regle.valeur(b));
+  }
+
+  // Ordre naturel : ce qui clôture bientôt d'abord, puis les ventes les plus
+  // récentes — ce sont elles qui disent la cote d'aujourd'hui.
+  return [...lots].sort((a, b) => {
+    if (a.a_venir !== b.a_venir) return a.a_venir ? -1 : 1;
+    if (a.a_venir) return (a.date_fin || "").localeCompare(b.date_fin || "");
+    return (b.date_fin || "").localeCompare(a.date_fin || "");
+  });
+}
+
 let valeurs = {};
 function valeursParDefaut() {
   const v = {};
@@ -561,15 +678,7 @@ function lotsVisibles() {
     return true;
   });
 
-  // Les deux populations ne se lisent pas dans le même ordre : ce qui va
-  // clôturer en premier d'un côté, les ventes les plus récentes de l'autre —
-  // ce sont elles qui disent la cote d'aujourd'hui.
-  retenus.sort((a, b) => {
-    if (a.a_venir !== b.a_venir) return a.a_venir ? -1 : 1;
-    if (a.a_venir) return (a.date_fin || "").localeCompare(b.date_fin || "");
-    return (b.date_fin || "").localeCompare(a.date_fin || "");
-  });
-  return retenus;
+  return trier(retenus);
 }
 
 /* ---------------------------------------------------------------------------
@@ -602,9 +711,16 @@ function etiquettesLot(l) {
 
 function carteLot(l) {
   const neuf = l.a_venir && !dejaVus.has(l.id_lot);
-  const bouton = document.createElement("button");
-  bouton.className = "carte " + (CLASSE_VERDICT[l.verdict] || "pas-de-reference");
-  bouton.onclick = () => ouvrirFiche(l);
+  // La carte mène à l'annonce officielle : c'est là que se décide un achat.
+  // L'analyse — coûts, comparables — reste à un doigt, sur « Détails ».
+  const bouton = document.createElement(l.url ? "a" : "div");
+  bouton.className = "carte " + (CLASSE_VERDICT[l.verdict] || "pas-de-reference")
+    + (l.url ? " carte-lien" : "");
+  if (l.url) {
+    bouton.href = l.url;
+    bouton.target = "_blank";
+    bouton.rel = "noopener";
+  }
 
   const sous = [l.annee || "année ?", km(l.kilometrage),
                 l.departement || "lieu inconnu"].join(" · ");
@@ -677,7 +793,16 @@ function carteLot(l) {
       ${chiffres}
       <div class="etiquettes">${etiquettes}</div>
     </div>
-    <div class="pied-carte">${pied}</div>`;
+    <div class="pied-carte">${pied}
+      <button class="bouton-detail" type="button">Détails</button>
+    </div>`;
+
+  // Le bouton vit à l'intérieur du lien : il faut lui reprendre le clic.
+  bouton.querySelector(".bouton-detail").addEventListener("click", evenement => {
+    evenement.preventDefault();
+    evenement.stopPropagation();
+    ouvrirFiche(l);
+  });
   return bouton;
 }
 
@@ -938,6 +1063,64 @@ $("#recherche").oninput = e => {
   minuteur = setTimeout(() => { recherche = e.target.value; rendre(); }, 120);
 };
 
+const selectTri = $("#tri");
+selectTri.innerHTML = TRIS.map(t => `<option value="${t.cle}">${t.libelle}</option>`).join("");
+selectTri.onchange = () => {
+  tri = selectTri.value;
+  rendre();
+  scrollTo({ top: 0, behavior: "smooth" });
+};
+
+/* ---------------------------------------------------------------------------
+ * Récupération des données à la demande
+ *
+ * La page ne peut pas interroger le site des enchères elle-même : un
+ * navigateur refuse les requêtes vers un autre domaine, et le contrôle
+ * anti-robot du site exige une session que seul le collecteur sait tenir. Le
+ * bouton va donc chercher la dernière collecte publiée — celle que la tâche
+ * programmée dépose deux fois par jour — et propose d'en déclencher une
+ * nouvelle si elle date.
+ * ------------------------------------------------------------------------ */
+const ACTIONS = "https://github.com/OctopusDz/git-ayoub/actions/workflows/veille.yml";
+
+function avis(html, duree = 6000) {
+  let boite = $("#avis");
+  if (!boite) {
+    boite = document.createElement("div");
+    boite.id = "avis";
+    boite.className = "avis";
+    document.body.appendChild(boite);
+  }
+  boite.innerHTML = html;
+  boite.classList.add("visible");
+  clearTimeout(boite._minuteur);
+  boite._minuteur = setTimeout(() => boite.classList.remove("visible"), duree);
+}
+
+async function rafraichir() {
+  const bouton = $("#rafraichir");
+  bouton.classList.add("tourne");
+  const avant = DONNEES.meta.genere_le;
+  try {
+    // L'horodatage force le contournement de tous les caches intermédiaires.
+    const reponse = await fetch(`data/hybrides.json?t=${Date.now()}`, { cache: "reload" });
+    if (!reponse.ok) throw new Error(reponse.status);
+    DONNEES = await reponse.json();
+    afficherEnTete();
+    rendre();
+    const nouveau = DONNEES.meta.genere_le !== avant;
+    avis(nouveau
+      ? `Données mises à jour — collecte du ${jourFr(DONNEES.meta.genere_le)}.`
+      : `Déjà à jour (collecte du ${jourFr(DONNEES.meta.genere_le)}).
+         <a href="${ACTIONS}" target="_blank" rel="noopener">Lancer une collecte →</a>`);
+  } catch (e) {
+    avis(`Récupération impossible — vérifie ta connexion.`);
+  } finally {
+    bouton.classList.remove("tourne");
+  }
+}
+$("#rafraichir").onclick = rafraichir;
+
 const themeStocke = localStorage.getItem(CLE_THEME);
 if (themeStocke) document.documentElement.dataset.theme = themeStocke;
 $("#bascule-theme").onclick = () => {
@@ -963,6 +1146,8 @@ async function charger() {
   const embarquees = document.getElementById("donnees-embarquees");
   if (embarquees) {
     DONNEES = JSON.parse(embarquees.textContent);
+    // Rien à rafraîchir quand les données sont dans le fichier lui-même.
+    $("#rafraichir").hidden = true;
     afficherEnTete();
     rendre();
     memoriserVus();
