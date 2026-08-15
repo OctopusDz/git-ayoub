@@ -360,6 +360,10 @@ main { padding: 14px; max-width: 760px; margin: 0 auto; }
   background: var(--attention-fond); border-left: 3px solid var(--attention);
   border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 12px 0;
 }
+.avantage {
+  background: var(--bon-fond); border-left: 3px solid var(--bon);
+  border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 12px 0;
+}
 .lien-officiel {
   display: block; text-align: center; background: var(--accent); color: #fff;
   border-radius: 11px; padding: 13px; font-weight: 620; text-decoration: none;
@@ -533,9 +537,15 @@ const FILTRES = [
     test: (l, v) => !v || !l.sans_carte_grise,
   },
   {
-    cle: "pros", type: "bascule", libelle: "Écarter les lots réservés aux pros",
-    defaut: false,
-    test: (l, v) => !v || !l.reserve_aux_pros,
+    // Deux marchés distincts, pas un simple attribut : les lots réservés aux
+    // pros se disputent entre moins d'acheteurs, et partent moins cher.
+    cle: "pros", type: "jetons", libelle: "Marché",
+    options: [["tous", "Les deux"], ["pros", "Réservés aux pros"],
+              ["public", "Tout public"]],
+    defaut: "tous",
+    actif: v => v !== "tous",
+    test: (l, v) => v === "tous"
+      || (v === "pros" ? !!l.reserve_aux_pros : !l.reserve_aux_pros),
   },
   {
     cle: "region", type: "select", libelle: "Région", defaut: "",
@@ -705,7 +715,7 @@ function etiquettesLot(l) {
   if (l.rechargeable) e.push(["", "Rechargeable"]);
   if (l.hybride_diesel) e.push(["grave", "Hybride diesel"]);
   if (l.base_incertaine) e.push(["alerte", "Base à vérifier"]);
-  if (l.reserve_aux_pros) e.push(["", "Pros"]);
+  if (l.reserve_aux_pros) e.push(["bien", "Réservé aux pros"]);
   if (l.premiere_main) e.push(["bien", "Première main"]);
   if (l.boite_vitesses) e.push(["", l.boite_vitesses]);
   // Un coût qui n'est qu'un plancher se signale près des chiffres, pas en
@@ -882,6 +892,15 @@ function ouvrirFiche(l) {
     ${(l.defauts && l.defauts.length) ? ligne("Défauts", l.defauts.join(", ")) : ""}
     ${l.immatriculation ? ligne("Immatriculation", l.immatriculation) : ""}
   </div>`;
+
+  if (l.reserve_aux_pros) {
+    html += `<div class="avantage"><strong>Réservé aux professionnels.</strong>
+      Les particuliers ne peuvent pas enchérir : il y a moins de monde en face.
+      À véhicule comparable, ces lots partent <strong>environ 2 055 € moins
+      cher</strong> que les lots tout public — mesuré sur ${DONNEES.meta.ventes_closes_referentiel || "9 000"}
+      ventes passées. C'est votre avantage, et l'estimation ci-dessous ne se
+      fonde que sur des ventes de ce marché-là.</div>`;
+  }
 
   if (l.a_venir && l.prix_max_conseille != null) {
     html += `<h3>Ce que ça coûte vraiment</h3><div class="lignes">

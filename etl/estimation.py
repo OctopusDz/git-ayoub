@@ -69,13 +69,32 @@ def comparables(lot: dict, historique: list[dict]) -> tuple[list[dict], str]:
     energie = energie_reelle(lot)
     age, km = lot.get("age"), lot.get("kilometrage")
 
+    # Un lot réservé aux professionnels et un lot ouvert à tous ne se vendent
+    # pas sur le même marché : moins d'enchérisseurs d'un côté, et un écart
+    # mesuré à 2 055 € sur l'historique, à véhicule comparable. Comparer les
+    # deux reviendrait à estimer une vente au détail avec des prix de gros.
+    pro = bool(lot.get("reserve_aux_pros"))
+
+    def meme_marche(c):
+        return bool(c.get("reserve_aux_pros")) == pro
+
+    def _et_meme_marche(critere):
+        return lambda c: meme_marche(c) and critere(c)
+
+    meme_modele_serre = (
+        lambda c: c["marque"] == marque and _famille(c) == famille
+        and _proche(c.get("age"), age, 0.25, 2)
+        and _proche(c.get("kilometrage"), km, 0.35, 20000))
+    meme_modele = lambda c: c["marque"] == marque and _famille(c) == famille
+
     paliers = [
-        ("même modèle, âge et kilométrage proches",
-         lambda c: c["marque"] == marque and _famille(c) == famille
-         and _proche(c.get("age"), age, 0.25, 2)
-         and _proche(c.get("kilometrage"), km, 0.35, 20000)),
-        ("même modèle",
-         lambda c: c["marque"] == marque and _famille(c) == famille),
+        # Le marché d'abord : mieux vaut peu de ventes du bon marché que
+        # beaucoup d'un marché où l'on n'enchérira jamais.
+        ("même modèle et même marché, âge et kilométrage proches",
+         _et_meme_marche(meme_modele_serre)),
+        ("même modèle et même marché", _et_meme_marche(meme_modele)),
+        ("même modèle, âge et kilométrage proches", meme_modele_serre),
+        ("même modèle", meme_modele),
         ("même marque et même énergie, âge proche",
          lambda c: c["marque"] == marque and energie_reelle(c) == energie
          and _proche(c.get("age"), age, 0.35, 3)),
