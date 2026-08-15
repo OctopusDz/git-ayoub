@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Icône de l'application « Hybrides ».
+       Lue à 60 px sur un écran d'accueil : une seule forme reconnaissable,
+       la silhouette de voiture, et un éclair pour l'hybride. Pas de texte. -->
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12463a"/>
+      <stop offset="1" stop-color="#0a2622"/>
+    </linearGradient>
+    <linearGradient id="eclair" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5ee08a"/>
+      <stop offset="1" stop-color="#1baf7a"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="114" fill="url(#fond)"/>
+
+  <!-- carrosserie -->
+  <path d="M96 300c0-10 5-19 14-23l30-13 38-52c9-12 23-19 38-19h96c14 0 27 6 36 17l40 49 34 12c13 5 22 17 22 31v28c0 9-7 16-16 16h-20a44 44 0 0 1-87 0h-90a44 44 0 0 1-87 0h-32c-9 0-16-7-16-16z"
+        fill="#f4f7f5"/>
+  <!-- vitrage -->
+  <path d="M186 213c5-7 13-11 21-11h41v58h-96zm86-11h44c8 0 16 4 21 10l32 48h-97z"
+        fill="#12463a" opacity="0.55"/>
+  <!-- roues -->
+  <circle cx="188" cy="330" r="30" fill="#0a2622"/>
+  <circle cx="188" cy="330" r="12" fill="#f4f7f5"/>
+  <circle cx="365" cy="330" r="30" fill="#0a2622"/>
+  <circle cx="365" cy="330" r="12" fill="#f4f7f5"/>
+
+  <!-- éclair : l'hybride -->
+  <path d="M292 96l-74 108h48l-22 88 78-116h-50z" fill="url(#eclair)"
+        stroke="#0a2622" stroke-width="10" stroke-linejoin="round"/>
+</svg>

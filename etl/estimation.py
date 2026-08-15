@@ -226,11 +226,13 @@ def estimer(lot: dict, historique: list[dict]) -> dict:
         frais_annexes=annexes["total"],
         frais_garde=annexes["postes"]["garde"],
         frais_rapatriement=annexes["postes"]["rapatriement"],
+        frais_deplacement=annexes["postes"]["deplacement"],
         frais_carte_grise=annexes["postes"]["carte_grise"],
         frais_incertains=annexes["incertain"],
         detail_frais=(f"garde : {annexes['detail']['garde']} · "
                       f"rapatriement {annexes['detail']['rapatriement']} "
                       f"({annexes['detail']['distance_km']} km) · "
+                      f"{annexes['detail']['deplacement']} · "
                       f"carte grise : {annexes['detail']['carte_grise']}"),
         confiance=confiance,
         verdict=verdict,

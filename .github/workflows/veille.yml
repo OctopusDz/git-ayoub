@@ -1,0 +1,119 @@
+name: Veille hybrides
+
+# Deux passages par jour : le matin avant que l'acheteur n'ouvre l'app, et le
+# soir pour rattraper les mises en ligne de la journée. Heures en UTC — la
+# France est à UTC+2 l'été, UTC+1 l'hiver ; on vise « tôt le matin » sans
+# chercher la minute.
+#
+# Attention : GitHub ne déclenche `schedule` que depuis la branche par défaut.
+# Tant que ce fichier n'est pas sur `master`, seuls `workflow_dispatch` et
+# `push` le lancent.
+on:
+  schedule:
+    - cron: "20 4 * * *"     # ~06h20 à Paris l'été
+    - cron: "20 16 * * *"    # ~18h20 à Paris l'été
+  workflow_dispatch:          # lancement à la demande depuis l'onglet Actions
+  push:
+    branches:
+      - master
+      - claude/auction-vehicles-analytics-portal-pp0bzj
+    paths: ["app/**", "etl/**", "scraper/**", ".github/workflows/veille.yml"]
+
+permissions:
+  contents: write             # pour committer les données collectées
+  pages: write                # pour publier sur GitHub Pages
+  id-token: write
+
+# Deux exécutions simultanées se marcheraient sur les pieds au moment du
+# commit : on laisse la plus récente terminer.
+concurrency:
+  group: veille
+  cancel-in-progress: false
+
+jobs:
+  collecte:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Le contrôle anti-robot du site refuse une partie des pages, d'autant
+      # plus depuis une adresse de centre de données. Le collecteur est
+      # reprenable : chaque relance ne redemande que les pages manquantes.
+      - name: Collecte des ventes ouvertes
+        id: collecte
+        run: |
+          for tentative in 1 2 3; do
+            echo "── tentative $tentative ──"
+            if python3 -m etl.quotidien 2>&1 | tee sortie.txt; then
+              if ! grep -qE '[1-9][0-9]* en échec' sortie.txt; then
+                echo "collecte_complete=oui" >> "$GITHUB_OUTPUT"
+                break
+              fi
+              echo "des pages manquent, on relance"
+            fi
+            sleep $((tentative * 20))
+          done
+          {
+            echo 'resume<<FIN'
+            sed -n '/ventes ouvertes/,$p' sortie.txt
+            echo FIN
+          } >> "$GITHUB_OUTPUT"
+
+      # Une collecte partielle ne doit pas écraser des données complètes par
+      # des données amputées : on ne publie que si le fichier tient debout.
+      - name: Contrôle du fichier produit
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          from pathlib import Path
+          fichier = Path("app/data/hybrides.json")
+          if not fichier.exists():
+              sys.exit("app/data/hybrides.json absent — collecte échouée")
+          charge = json.loads(fichier.read_text(encoding="utf-8"))
+          nb = len(charge.get("lots") or [])
+          if nb < 100:
+              sys.exit(f"seulement {nb} hybrides — collecte manifestement partielle")
+          print(f"{nb} hybrides, {charge['meta']['nb_a_venir']} à venir")
+          PY
+
+      - name: Publier les données collectées
+        run: |
+          git config user.name "veille-hybrides[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/data/hybrides.json data/suivi.json
+          if git diff --staged --quiet; then
+            echo "aucun changement de données"
+          else
+            git commit -m "Veille : collecte du $(date -u +%Y-%m-%d\ %H:%M) UTC"
+            git push
+          fi
+
+      - name: Récapitulatif
+        run: |
+          {
+            echo "## Veille hybrides"
+            echo '```'
+            cat sortie.txt | tail -25
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+
+  deploiement:
+    needs: collecte
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4

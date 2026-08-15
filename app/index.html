@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Hybrides — enchères du Domaine</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Les véhicules hybrides aux enchères du Domaine : estimation, plafond d'enchère et coût de revient complet.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hybrides">
+<link rel="apple-touch-icon" href="icone-180.png">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<style>
+/* Application « Hybrides » — pensée pour le pouce, sur un iPhone, le matin.
+ *
+ * Une seule règle de conception : ce qui décide d'une enchère doit être lisible
+ * sans ouvrir quoi que ce soit. Le plafond d'enchère est donc l'élément le plus
+ * gros de chaque carte, et tout le reste lui est subordonné.
+ */
+
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --surface-2: #f9f9f7;
+  --surface-3: #f2f1ed;
+  --piste: #eeede8;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grille: #e1e0d9;
+  --bordure: rgba(11, 11, 11, 0.10);
+  --bordure-forte: rgba(11, 11, 11, 0.18);
+  --accent: #2a78d6;
+  --bon: #0a8f0a;
+  --bon-fond: rgba(10, 143, 10, 0.10);
+  --attention: #b57200;
+  --attention-fond: rgba(250, 178, 25, 0.14);
+  --critique: #cc3b3b;
+  --critique-fond: rgba(204, 59, 59, 0.10);
+  --rayon: 14px;
+  --ombre: 0 1px 2px rgba(11, 11, 11, 0.06), 0 4px 14px rgba(11, 11, 11, 0.05);
+  --police: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --sur-encoche: env(safe-area-inset-top, 0px);
+  --sous-encoche: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --surface-2: #0d0d0d;
+    --surface-3: #232322;
+    --piste: #2c2c2a;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grille: #2c2c2a;
+    --bordure: rgba(255, 255, 255, 0.10);
+    --bordure-forte: rgba(255, 255, 255, 0.20);
+    --accent: #4d95e8;
+    --bon: #35c035;
+    --bon-fond: rgba(53, 192, 53, 0.14);
+    --attention: #e0a220;
+    --attention-fond: rgba(224, 162, 32, 0.16);
+    --critique: #e66767;
+    --critique-fond: rgba(230, 103, 103, 0.14);
+    --ombre: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.3);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --surface-2: #0d0d0d;
+  --surface-3: #232322;
+  --piste: #2c2c2a;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grille: #2c2c2a;
+  --bordure: rgba(255, 255, 255, 0.10);
+  --bordure-forte: rgba(255, 255, 255, 0.20);
+  --accent: #4d95e8;
+  --bon: #35c035;
+  --bon-fond: rgba(53, 192, 53, 0.14);
+  --attention: #e0a220;
+  --attention-fond: rgba(224, 162, 32, 0.16);
+  --critique: #e66767;
+  --critique-fond: rgba(230, 103, 103, 0.14);
+  --ombre: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0;
+  font-family: var(--police);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+  padding-bottom: calc(72px + var(--sous-encoche));
+}
+
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+/* --- en-tête ------------------------------------------------------------- */
+.bandeau {
+  position: sticky; top: 0; z-index: 40;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--bordure);
+  padding: calc(10px + var(--sur-encoche)) 14px 0;
+}
+.bandeau-haut { display: flex; align-items: center; gap: 10px; }
+.bandeau h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.02em; }
+.bandeau .fraicheur { font-size: 11px; color: var(--text-muted); }
+.bandeau .espace { flex: 1; }
+.icone-bouton {
+  border: 1px solid var(--bordure-forte); background: var(--surface-1);
+  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  font-size: 15px; flex: none;
+}
+
+.segments {
+  display: flex; gap: 3px; background: var(--surface-3);
+  padding: 3px; border-radius: 11px; margin: 10px 0;
+}
+.segments button {
+  flex: 1; border: 0; background: transparent; padding: 8px 6px;
+  border-radius: 9px; color: var(--text-secondary); font-weight: 550; font-size: 14px;
+}
+.segments button[aria-selected="true"] {
+  background: var(--surface-1); color: var(--text-primary); box-shadow: var(--ombre);
+}
+
+.rangee-filtres {
+  display: flex; gap: 8px; align-items: center; padding-bottom: 10px;
+}
+.rangee-filtres input[type="search"] {
+  flex: 1; min-width: 0; border: 1px solid var(--bordure-forte);
+  background: var(--surface-2); border-radius: 10px; padding: 9px 12px;
+  -webkit-appearance: none;
+}
+.bouton-filtres {
+  border: 1px solid var(--bordure-forte); background: var(--surface-1);
+  border-radius: 10px; padding: 9px 13px; font-weight: 550; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+}
+.bouton-filtres .pastille-compte {
+  background: var(--accent); color: #fff; border-radius: 999px;
+  font-size: 11px; font-weight: 700; padding: 1px 6px;
+}
+
+/* --- liste ---------------------------------------------------------------- */
+main { padding: 14px; max-width: 760px; margin: 0 auto; }
+.compte-resultats {
+  font-size: 13px; color: var(--text-secondary); margin: 0 0 12px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.compte-resultats strong { color: var(--text-primary); }
+
+.carte {
+  background: var(--surface-1); border: 1px solid var(--bordure);
+  border-radius: var(--rayon); box-shadow: var(--ombre);
+  margin-bottom: 12px; overflow: hidden; position: relative;
+  display: block; width: 100%; text-align: left; padding: 0;
+}
+.carte.tres-interessant { border-left: 4px solid var(--bon); }
+.carte.interessant { border-left: 4px solid var(--accent); }
+.carte.marge-faible { border-left: 4px solid var(--attention); }
+.carte.a-eviter, .carte.pas-de-reference { border-left: 4px solid var(--bordure-forte); }
+
+.carte-corps { padding: 13px 14px; display: grid; gap: 10px; }
+.carte-tete { display: flex; gap: 11px; align-items: flex-start; }
+.vignette {
+  width: 62px; height: 47px; object-fit: cover; border-radius: 8px;
+  background: var(--piste); flex: none;
+}
+.carte-titre { flex: 1; min-width: 0; }
+.carte-titre h2 {
+  margin: 0; font-size: 15.5px; font-weight: 620; letter-spacing: -0.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.carte-titre .sous { font-size: 12.5px; color: var(--text-secondary); margin-top: 1px; }
+
+.marqueur-neuf {
+  background: var(--bon); color: #fff; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 999px; letter-spacing: 0.04em; flex: none;
+}
+
+.chiffres { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.chiffre { background: var(--surface-3); border-radius: 9px; padding: 8px 10px; }
+.chiffre .libelle { font-size: 10.5px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; }
+.chiffre .valeur { font-size: 18px; font-weight: 660; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.chiffre.plafond { background: var(--bon-fond); }
+.chiffre.plafond .valeur { color: var(--bon); }
+.chiffre.large { grid-column: 1 / -1; }
+.chiffre .precision { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.etiquettes { display: flex; flex-wrap: wrap; gap: 5px; }
+.etiquette {
+  font-size: 11.5px; padding: 2px 8px; border-radius: 999px;
+  background: var(--surface-3); color: var(--text-secondary);
+  border: 1px solid var(--bordure);
+}
+.etiquette.alerte { background: var(--attention-fond); color: var(--attention); border-color: transparent; }
+.etiquette.grave { background: var(--critique-fond); color: var(--critique); border-color: transparent; }
+.etiquette.bien { background: var(--bon-fond); color: var(--bon); border-color: transparent; }
+
+.pied-carte {
+  display: flex; align-items: center; gap: 7px; font-size: 12px;
+  color: var(--text-muted); border-top: 1px solid var(--grille);
+  padding: 9px 14px; background: var(--surface-1);
+  white-space: nowrap; overflow: hidden;
+}
+.pied-carte .urgent { color: var(--critique); font-weight: 600; }
+
+.vide { text-align: center; color: var(--text-muted); padding: 50px 20px; }
+.vide .grand { font-size: 34px; margin-bottom: 10px; }
+
+/* --- feuille de filtres --------------------------------------------------- */
+.voile {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45);
+  z-index: 50; opacity: 0; pointer-events: none; transition: opacity .18s;
+}
+.voile.ouverte { opacity: 1; pointer-events: auto; }
+
+.feuille {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  background: var(--surface-2); border-radius: 18px 18px 0 0;
+  max-height: 88vh; display: flex; flex-direction: column;
+  transform: translateY(100%); transition: transform .22s cubic-bezier(.3,.8,.4,1);
+  padding-bottom: var(--sous-encoche);
+}
+.feuille.ouverte { transform: translateY(0); }
+.feuille-tete {
+  display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--bordure); flex: none;
+}
+.feuille-tete h2 { margin: 0; font-size: 16px; flex: 1; }
+.feuille-corps { overflow-y: auto; padding: 14px 16px 20px; -webkit-overflow-scrolling: touch; }
+.poignee {
+  width: 36px; height: 4px; background: var(--bordure-forte);
+  border-radius: 2px; margin: 7px auto 0; flex: none;
+}
+
+.groupe-filtre { margin-bottom: 18px; }
+.groupe-filtre > label,
+.groupe-filtre > .titre-groupe {
+  display: block; font-size: 12px; font-weight: 620; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 7px;
+}
+.jetons { display: flex; flex-wrap: wrap; gap: 6px; }
+.jeton {
+  border: 1px solid var(--bordure-forte); background: var(--surface-1);
+  border-radius: 999px; padding: 7px 13px; font-size: 13.5px;
+}
+.jeton[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 550;
+}
+.groupe-filtre select, .groupe-filtre input[type="number"] {
+  width: 100%; border: 1px solid var(--bordure-forte); background: var(--surface-1);
+  border-radius: 10px; padding: 10px 12px; -webkit-appearance: none;
+}
+.paire { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.curseur { display: flex; align-items: center; gap: 10px; }
+.curseur input[type="range"] { flex: 1; accent-color: var(--accent); }
+.curseur .lecture {
+  font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13px;
+  min-width: 84px; text-align: right;
+}
+.bascule {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 0; border-bottom: 1px solid var(--grille); font-size: 14.5px;
+}
+.bascule:last-child { border-bottom: 0; }
+.bascule input { width: 22px; height: 22px; accent-color: var(--accent); }
+
+.feuille-pied {
+  display: flex; gap: 10px; padding: 12px 16px;
+  border-top: 1px solid var(--bordure); background: var(--surface-1); flex: none;
+}
+.bouton-plein {
+  flex: 1; border: 0; background: var(--accent); color: #fff;
+  border-radius: 11px; padding: 13px; font-weight: 620; font-size: 15px;
+}
+.bouton-vide {
+  border: 1px solid var(--bordure-forte); background: var(--surface-1);
+  border-radius: 11px; padding: 13px 18px; font-weight: 550;
+}
+
+/* --- fiche détaillée ------------------------------------------------------- */
+.fiche { padding: 0 0 20px; }
+.fiche img.photo {
+  width: 100%; height: 190px; object-fit: cover; background: var(--piste);
+  border-radius: 12px; margin-bottom: 14px;
+}
+.fiche h3 {
+  margin: 18px 0 8px; font-size: 13px; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-secondary);
+}
+.lignes { display: grid; gap: 1px; background: var(--grille); border-radius: 10px; overflow: hidden; }
+.ligne {
+  display: flex; justify-content: space-between; gap: 12px;
+  background: var(--surface-1); padding: 10px 12px; font-size: 14px;
+}
+.ligne .cle { color: var(--text-secondary); }
+.ligne .val { font-variant-numeric: tabular-nums; text-align: right; font-weight: 550; }
+.ligne.total { background: var(--surface-3); font-weight: 650; }
+.descriptif {
+  background: var(--surface-1); border: 1px solid var(--bordure);
+  border-radius: 10px; padding: 12px; font-size: 13.5px;
+  color: var(--text-secondary); white-space: pre-wrap; line-height: 1.5;
+}
+.avertissement {
+  background: var(--attention-fond); border-left: 3px solid var(--attention);
+  border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 12px 0;
+}
+.lien-officiel {
+  display: block; text-align: center; background: var(--accent); color: #fff;
+  border-radius: 11px; padding: 13px; font-weight: 620; text-decoration: none;
+  margin-top: 16px;
+}
+table.comparables { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.comparables th {
+  text-align: right; font-size: 11px; color: var(--text-secondary);
+  font-weight: 600; padding: 5px 6px; border-bottom: 1px solid var(--bordure);
+}
+table.comparables th:first-child { text-align: left; }
+table.comparables td {
+  padding: 7px 6px; border-bottom: 1px solid var(--grille);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+table.comparables td:first-child { text-align: left; color: var(--text-secondary); }
+table.comparables td.prix { font-weight: 620; }
+
+.note-bas { font-size: 12px; color: var(--text-muted); margin-top: 8px; line-height: 1.45; }
+</style>
+</head>
+<body>
+
+<header class="bandeau">
+  <div class="bandeau-haut">
+    <div>
+      <h1>Hybrides</h1>
+      <div class="fraicheur" id="fraicheur">chargement…</div>
+    </div>
+    <div class="espace"></div>
+    <button class="icone-bouton" id="bascule-theme" aria-label="Changer de thème">◐</button>
+  </div>
+
+  <div class="segments" role="tablist">
+    <button role="tab" aria-selected="true" data-onglet="a_venir">À vendre</button>
+    <button role="tab" aria-selected="false" data-onglet="vendus">Vendus</button>
+    <button role="tab" aria-selected="false" data-onglet="tous">Tous</button>
+  </div>
+
+  <div class="rangee-filtres">
+    <input type="search" id="recherche" placeholder="Marque, modèle, ville…" aria-label="Rechercher">
+    <button class="bouton-filtres" id="ouvrir-filtres">
+      Filtres <span class="pastille-compte" id="compte-filtres" hidden>0</span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <p class="compte-resultats" id="resultats"></p>
+  <div id="liste"></div>
+</main>
+
+<div class="voile" id="voile"></div>
+
+<!-- feuille des filtres -->
+<section class="feuille" id="feuille-filtres" aria-label="Filtres">
+  <div class="poignee"></div>
+  <div class="feuille-tete"><h2>Filtres</h2>
+    <button class="icone-bouton" data-fermer aria-label="Fermer">✕</button>
+  </div>
+  <div class="feuille-corps" id="corps-filtres"></div>
+  <div class="feuille-pied">
+    <button class="bouton-vide" id="raz-filtres">Réinitialiser</button>
+    <button class="bouton-plein" data-fermer id="appliquer">Voir les résultats</button>
+  </div>
+</section>
+
+<!-- fiche d'un lot -->
+<section class="feuille" id="feuille-fiche" aria-label="Détail du lot">
+  <div class="poignee"></div>
+  <div class="feuille-tete"><h2 id="titre-fiche">Lot</h2>
+    <button class="icone-bouton" data-fermer aria-label="Fermer">✕</button>
+  </div>
+  <div class="feuille-corps"><div class="fiche" id="corps-fiche"></div></div>
+</section>
+
+<script>
+"use strict";
+
+/* ---------------------------------------------------------------------------
+ * État et utilitaires
+ * ------------------------------------------------------------------------ */
+const CLE_VUS = "hybrides.lots-vus";
+const CLE_THEME = "hybrides.theme";
+
+let DONNEES = { meta: {}, lots: [] };
+let onglet = "a_venir";
+let recherche = "";
+let dejaVus = new Set();
+let observateur = null;
+// Nombre de cartes posées par tranche au défilement.
+const TRANCHE = 30;
+
+const euro = n => (n === null || n === undefined)
+  ? "—" : Math.round(n).toLocaleString("fr-FR") + " €";
+const km = n => (n === null || n === undefined)
+  ? "km inconnu" : Math.round(n).toLocaleString("fr-FR") + " km";
+const $ = s => document.querySelector(s);
+
+function jourFr(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return isNaN(d) ? "—"
+    : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/* ---------------------------------------------------------------------------
+ * Filtres — déclarés en données pour qu'en ajouter un tienne en une ligne.
+ *
+ * `test(lot, valeur)` décide si le lot passe ; `actif(valeur)` dit si le
+ * filtre compte comme posé. Le reste (rendu, comptage, réinitialisation) est
+ * générique.
+ * ------------------------------------------------------------------------ */
+const FILTRES = [
+  {
+    cle: "metropole", type: "bascule", libelle: "France métropolitaine seulement",
+    defaut: true,
+    test: (l, v) => !v || l.metropole === true,
+  },
+  {
+    cle: "sans_diesel", type: "bascule", libelle: "Écarter les hybrides diesel",
+    defaut: true,
+    test: (l, v) => !v || !l.hybride_diesel,
+  },
+  {
+    cle: "rechargeable", type: "jetons", libelle: "Type d'hybride",
+    options: [["tous", "Tous"], ["non", "Non rechargeable"], ["oui", "Rechargeable"]],
+    defaut: "tous",
+    actif: v => v !== "tous",
+    test: (l, v) => v === "tous" || (v === "oui" ? !!l.rechargeable : !l.rechargeable),
+  },
+  {
+    cle: "verdict", type: "jetons", libelle: "Verdict d'enchère", multiple: true,
+    options: [["Très intéressant", "Très intéressant"], ["Intéressant", "Intéressant"],
+              ["Marge faible", "Marge faible"], ["À éviter", "À éviter"]],
+    defaut: [],
+    actif: v => v.length > 0,
+    test: (l, v) => v.length === 0 || v.includes(l.verdict),
+  },
+  {
+    cle: "etat", type: "jetons", libelle: "État signalé", multiple: true,
+    options: [["Aucun défaut signalé", "Aucun défaut"], ["Défauts d'usage", "Usage"],
+              ["Défaut bloquant isolé", "Bloquant isolé"], ["Défauts majeurs", "Majeurs"]],
+    defaut: [],
+    actif: v => v.length > 0,
+    test: (l, v) => v.length === 0 || v.includes(l.gravite),
+  },
+  {
+    cle: "roulant", type: "bascule", libelle: "Écarter les non roulants", defaut: false,
+    test: (l, v) => !v || !l.non_roulant,
+  },
+  {
+    cle: "accidente", type: "bascule", libelle: "Écarter les carrosseries accidentées",
+    defaut: false,
+    test: (l, v) => !v || !(l.defauts || []).some(d => /choc|carrosserie|accident/i.test(d)),
+  },
+  {
+    cle: "avec_cle", type: "bascule", libelle: "Écarter les véhicules sans clé", defaut: false,
+    test: (l, v) => !v || !l.sans_cle,
+  },
+  {
+    cle: "avec_cg", type: "bascule", libelle: "Écarter les véhicules sans carte grise",
+    defaut: false,
+    test: (l, v) => !v || !l.sans_carte_grise,
+  },
+  {
+    cle: "pros", type: "bascule", libelle: "Écarter les lots réservés aux pros",
+    defaut: false,
+    test: (l, v) => !v || !l.reserve_aux_pros,
+  },
+  {
+    cle: "region", type: "select", libelle: "Région", defaut: "",
+    options: l => [...new Set(l.map(x => x.region).filter(Boolean))].sort(),
+    actif: v => v !== "",
+    test: (l, v) => !v || l.region === v,
+  },
+  {
+    cle: "marque", type: "select", libelle: "Marque", defaut: "",
+    options: l => [...new Set(l.map(x => x.marque).filter(Boolean))].sort(),
+    actif: v => v !== "",
+    test: (l, v) => !v || l.marque === v,
+  },
+  {
+    cle: "km_max", type: "curseur", libelle: "Kilométrage maximum",
+    min: 0, max: 300000, pas: 10000, defaut: 300000,
+    format: v => v >= 300000 ? "sans limite" : km(v),
+    actif: v => v < 300000,
+    // Un kilométrage inconnu ne doit pas disparaître silencieusement : il
+    // reste affiché, la carte signale l'absence d'information.
+    test: (l, v) => v >= 300000 || l.kilometrage == null || l.kilometrage <= v,
+  },
+  {
+    cle: "annee_min", type: "curseur", libelle: "Année minimum",
+    min: 2000, max: 2026, pas: 1, defaut: 2000,
+    format: v => v <= 2000 ? "toutes" : "à partir de " + v,
+    actif: v => v > 2000,
+    test: (l, v) => v <= 2000 || l.annee == null || l.annee >= v,
+  },
+  {
+    cle: "mise_max", type: "curseur", libelle: "Mise à prix maximum",
+    min: 0, max: 30000, pas: 500, defaut: 30000,
+    format: v => v >= 30000 ? "sans limite" : euro(v),
+    actif: v => v < 30000,
+    test: (l, v) => v >= 30000 || l.mise_a_prix == null || l.mise_a_prix <= v,
+  },
+  {
+    cle: "budget_max", type: "curseur", libelle: "Budget total tout compris",
+    min: 0, max: 30000, pas: 500, defaut: 30000,
+    format: v => v >= 30000 ? "sans limite" : euro(v),
+    actif: v => v < 30000,
+    // Ne s'applique qu'aux lots chiffrés : un lot sans estimation reste visible.
+    test: (l, v) => v >= 30000 || l.cout_total_max == null || l.cout_total_max <= v,
+  },
+];
+
+let valeurs = {};
+function valeursParDefaut() {
+  const v = {};
+  for (const f of FILTRES) v[f.cle] = Array.isArray(f.defaut) ? [...f.defaut] : f.defaut;
+  return v;
+}
+const filtreActif = f =>
+  f.actif ? f.actif(valeurs[f.cle]) : valeurs[f.cle] !== f.defaut;
+
+/* ---------------------------------------------------------------------------
+ * Sélection
+ * ------------------------------------------------------------------------ */
+function lotsVisibles() {
+  const mots = recherche.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const retenus = DONNEES.lots.filter(l => {
+    if (onglet === "a_venir" && !l.a_venir) return false;
+    if (onglet === "vendus" && (l.a_venir || !l.prix)) return false;
+    for (const f of FILTRES) if (!f.test(l, valeurs[f.cle])) return false;
+    if (mots.length) {
+      const foin = [l.intitule, l.marque, l.modele, l.ville, l.departement,
+                    l.region, l.immatriculation].join(" ").toLowerCase();
+      if (!mots.every(m => foin.includes(m))) return false;
+    }
+    return true;
+  });
+
+  // Les deux populations ne se lisent pas dans le même ordre : ce qui va
+  // clôturer en premier d'un côté, les ventes les plus récentes de l'autre —
+  // ce sont elles qui disent la cote d'aujourd'hui.
+  retenus.sort((a, b) => {
+    if (a.a_venir !== b.a_venir) return a.a_venir ? -1 : 1;
+    if (a.a_venir) return (a.date_fin || "").localeCompare(b.date_fin || "");
+    return (b.date_fin || "").localeCompare(a.date_fin || "");
+  });
+  return retenus;
+}
+
+/* ---------------------------------------------------------------------------
+ * Rendu des cartes
+ * ------------------------------------------------------------------------ */
+const CLASSE_VERDICT = {
+  "Très intéressant": "tres-interessant", "Intéressant": "interessant",
+  "Marge faible": "marge-faible", "À éviter": "a-eviter",
+};
+
+function etiquettesLot(l) {
+  const e = [];
+  if (l.gravite === "Aucun défaut signalé") e.push(["bien", "Aucun défaut"]);
+  else if (l.gravite === "Défauts majeurs") e.push(["grave", "Défauts majeurs"]);
+  else if (l.gravite) e.push(["alerte", l.gravite]);
+  if (l.non_roulant) e.push(["grave", "Ne roule pas"]);
+  if (l.sans_cle) e.push(["alerte", "Sans clé"]);
+  if (l.sans_carte_grise) e.push(["alerte", "Sans carte grise"]);
+  if (l.rechargeable) e.push(["", "Rechargeable"]);
+  if (l.hybride_diesel) e.push(["grave", "Hybride diesel"]);
+  if (l.base_incertaine) e.push(["alerte", "Base à vérifier"]);
+  if (l.reserve_aux_pros) e.push(["", "Pros"]);
+  if (l.premiere_main) e.push(["bien", "Première main"]);
+  if (l.boite_vitesses) e.push(["", l.boite_vitesses]);
+  // Un coût qui n'est qu'un plancher se signale près des chiffres, pas en
+  // pied de carte où il passerait pour une mention de service.
+  if (l.a_venir && l.frais_incertains) e.push(["grave", "Coût plancher"]);
+  return e;
+}
+
+function carteLot(l) {
+  const neuf = l.a_venir && !dejaVus.has(l.id_lot);
+  const bouton = document.createElement("button");
+  bouton.className = "carte " + (CLASSE_VERDICT[l.verdict] || "pas-de-reference");
+  bouton.onclick = () => ouvrirFiche(l);
+
+  const sous = [l.annee || "année ?", km(l.kilometrage),
+                l.departement || "lieu inconnu"].join(" · ");
+
+  let chiffres;
+  if (l.a_venir) {
+    const fourchette = (l.fourchette_basse && l.fourchette_haute)
+      ? `${euro(l.fourchette_basse)} – ${euro(l.fourchette_haute)}` : "—";
+    chiffres = `
+      <div class="chiffres">
+        <div class="chiffre">
+          <div class="libelle">Mise à prix</div>
+          <div class="valeur">${euro(l.mise_a_prix)}</div>
+        </div>
+        <div class="chiffre plafond">
+          <div class="libelle">Enchère max</div>
+          <div class="valeur">${euro(l.prix_max_conseille)}</div>
+          <div class="precision">${euro(l.cout_total_max)} tout compris</div>
+        </div>
+        <div class="chiffre large">
+          <div class="libelle">Fourchette attendue à la vente</div>
+          <div class="valeur" style="font-size:16px">${fourchette}</div>
+          <div class="precision">${l.nb_comparables || 0} ventes comparables · confiance ${l.confiance || "—"}</div>
+        </div>
+      </div>`;
+  } else {
+    const mult = l.multiple_mise_a_prix ? `×${l.multiple_mise_a_prix} la mise à prix` : "";
+    chiffres = `
+      <div class="chiffres">
+        <div class="chiffre">
+          <div class="libelle">Mise à prix</div>
+          <div class="valeur">${euro(l.mise_a_prix)}</div>
+        </div>
+        <div class="chiffre plafond">
+          <div class="libelle">Vendu</div>
+          <div class="valeur">${euro(l.prix)}</div>
+          <div class="precision">${mult}</div>
+        </div>
+      </div>`;
+  }
+
+  const etiquettes = etiquettesLot(l)
+    .map(([c, t]) => `<span class="etiquette ${c}">${t}</span>`).join("");
+
+  let pied;
+  if (l.a_venir) {
+    const j = l.jours_restants;
+    const urgent = j !== null && j !== undefined && j <= 3;
+    const echeance = (j === null || j === undefined) ? "clôture inconnue"
+      : j < 0 ? "clôturé" : j === 0 ? "clôture aujourd'hui"
+      : j === 1 ? "clôture demain" : `clôture dans ${j} j`;
+    pied = `<span class="${urgent ? "urgent" : ""}">${echeance}</span>
+            <span>·</span><span>${jourFr(l.date_fin)}</span>`;
+  } else {
+    pied = `<span>vendu le ${jourFr(l.date_fin)}</span>`;
+  }
+
+  bouton.innerHTML = `
+    <div class="carte-corps">
+      <div class="carte-tete">
+        ${l.image ? `<img class="vignette" src="${l.image}" alt="" loading="lazy"
+                          onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'vignette'}))">`
+                  : `<div class="vignette"></div>`}
+        <div class="carte-titre">
+          <h2>${l.intitule || "Sans intitulé"}</h2>
+          <div class="sous">${sous}</div>
+        </div>
+        ${neuf ? `<span class="marqueur-neuf">NOUVEAU</span>` : ""}
+      </div>
+      ${chiffres}
+      <div class="etiquettes">${etiquettes}</div>
+    </div>
+    <div class="pied-carte">${pied}</div>`;
+  return bouton;
+}
+
+function rendre() {
+  const lots = lotsVisibles();
+  const liste = $("#liste");
+  liste.innerHTML = "";
+
+  const nbFiltres = FILTRES.filter(filtreActif).length;
+  const badge = $("#compte-filtres");
+  badge.hidden = nbFiltres === 0;
+  badge.textContent = nbFiltres;
+
+  const nouveaux = lots.filter(l => l.a_venir && !dejaVus.has(l.id_lot)).length;
+  $("#resultats").innerHTML =
+    `<strong>${lots.length}</strong> ${lots.length > 1 ? "véhicules" : "véhicule"}`
+    + (nouveaux ? ` · <span style="color:var(--bon);font-weight:600">${nouveaux} nouveau${nouveaux > 1 ? "x" : ""}</span>` : "");
+
+  if (!lots.length) {
+    liste.innerHTML = `<div class="vide"><div class="grand">🔍</div>
+      Aucun véhicule ne correspond.<br>Essaie d'élargir les filtres.</div>`;
+    return;
+  }
+
+  // Des centaines de cartes d'un coup, chacune avec sa photo, mettent un
+  // téléphone à genoux. On en pose une tranche, puis on complète à mesure que
+  // le pouce descend.
+  let poses = 0;
+  const poserTranche = () => {
+    const fragment = document.createDocumentFragment();
+    for (const l of lots.slice(poses, poses + TRANCHE)) fragment.appendChild(carteLot(l));
+    poses = Math.min(poses + TRANCHE, lots.length);
+    liste.insertBefore(fragment, sentinelle);
+    sentinelle.hidden = poses >= lots.length;
+  };
+
+  const sentinelle = document.createElement("div");
+  sentinelle.style.height = "1px";
+  liste.appendChild(sentinelle);
+
+  if (observateur) observateur.disconnect();
+  observateur = new IntersectionObserver(entrees => {
+    if (entrees.some(e => e.isIntersecting)) poserTranche();
+  }, { rootMargin: "600px" });
+
+  poserTranche();
+  observateur.observe(sentinelle);
+}
+
+/* ---------------------------------------------------------------------------
+ * Fiche détaillée
+ * ------------------------------------------------------------------------ */
+function ligne(cle, val, classe = "") {
+  return `<div class="ligne ${classe}"><span class="cle">${cle}</span>
+          <span class="val">${val}</span></div>`;
+}
+
+function ouvrirFiche(l) {
+  $("#titre-fiche").textContent = l.intitule || "Lot";
+  const c = $("#corps-fiche");
+  let html = "";
+
+  if (l.image) html += `<img class="photo" src="${l.image}" alt="">`;
+
+  html += `<div class="lignes">
+    ${ligne("Année", l.annee || "inconnue")}
+    ${ligne("Kilométrage", km(l.kilometrage))}
+    ${ligne("Énergie", l.carburant || "—")}
+    ${l.boite_vitesses ? ligne("Boîte", l.boite_vitesses) : ""}
+    ${ligne("Lieu", [l.ville, l.departement].filter(Boolean).join(", ") || "—")}
+    ${ligne("État signalé", l.gravite || "—")}
+    ${(l.defauts && l.defauts.length) ? ligne("Défauts", l.defauts.join(", ")) : ""}
+    ${l.immatriculation ? ligne("Immatriculation", l.immatriculation) : ""}
+  </div>`;
+
+  if (l.a_venir && l.prix_max_conseille != null) {
+    html += `<h3>Ce que ça coûte vraiment</h3><div class="lignes">
+      ${ligne("Enchère maximum conseillée", euro(l.prix_max_conseille))}
+      ${ligne(`Frais de vente (${l.taux_frais_pct || 11} %)`,
+              euro(l.prix_max_conseille * (l.taux_frais_pct || 11) / 100))}
+      ${ligne("Plateau / rapatriement", euro(l.frais_rapatriement))}
+      ${ligne("Carte grise", euro(l.frais_carte_grise))}
+      ${ligne("Garde du fourriériste", euro(l.frais_garde))}
+      ${ligne("Déplacement (train, repas)", euro(l.frais_deplacement))}
+      ${ligne("Total à ne pas dépasser", euro(l.cout_total_max), "total")}
+    </div>`;
+    if (l.frais_incertains) {
+      html += `<div class="avertissement"><strong>Coût plancher.</strong>
+        L'annonce mentionne des frais de garde sans les chiffrer : le calcul
+        retient deux jours de dépassement, la facture réelle peut être plus
+        lourde.</div>`;
+    }
+
+    html += `<h3>Prix attendu à la vente</h3><div class="lignes">
+      ${ligne("Fourchette", `${euro(l.fourchette_basse)} – ${euro(l.fourchette_haute)}`)}
+      ${ligne("Estimation centrale", euro(l.estimation))}
+      ${ligne("Mise à prix", euro(l.mise_a_prix))}
+      ${ligne("Confiance", `${l.confiance || "—"} · ${l.nb_comparables || 0} comparables`)}
+      ${ligne("Base de comparaison", l.base || "—")}
+    </div>`;
+
+    if (l.comparables && l.comparables.length) {
+      html += `<h3>Les ventes qui fondent ce chiffre</h3>
+      <table class="comparables">
+        <thead><tr><th>Véhicule</th><th>Mise</th><th>Vendu</th><th>×</th></tr></thead>
+        <tbody>${l.comparables.map(c => `<tr>
+          <td>${(c.intitule || "").slice(0, 26)}<br>
+              <span style="font-size:11px;color:var(--text-muted)">
+              ${c.annee || "?"} · ${c.kilometrage ? Math.round(c.kilometrage / 1000) + "k km" : "km ?"}</span></td>
+          <td>${euro(c.mise_a_prix)}</td>
+          <td class="prix">${euro(c.prix)}</td>
+          <td>${c.mise_a_prix ? "×" + (c.prix / c.mise_a_prix).toFixed(1) : "—"}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+      <p class="note-bas">Sur l'ensemble du corpus, un lot part en médiane à
+        ${DONNEES.meta.multiple_median || "?"} fois sa mise à prix — c'est pourquoi
+        l'estimation ne se fie pas à la seule mise à prix.</p>`;
+    }
+  } else if (!l.a_venir) {
+    html += `<h3>Résultat de la vente</h3><div class="lignes">
+      ${ligne("Mise à prix", euro(l.mise_a_prix))}
+      ${ligne("Prix atteint", euro(l.prix), "total")}
+      ${l.multiple_mise_a_prix ? ligne("Multiple", "×" + l.multiple_mise_a_prix) : ""}
+      ${ligne("Date", jourFr(l.date_fin))}
+    </div>`;
+  }
+
+  if (l.description) {
+    html += `<h3>Descriptif de l'annonce</h3>
+             <div class="descriptif">${l.description.replace(/</g, "&lt;")}</div>`;
+  }
+  if (l.url) {
+    html += `<a class="lien-officiel" href="${l.url}" target="_blank" rel="noopener">
+             Voir sur encheres-domaine.gouv.fr →</a>`;
+  }
+
+  c.innerHTML = html;
+  ouvrir("#feuille-fiche");
+}
+
+/* ---------------------------------------------------------------------------
+ * Feuilles coulissantes
+ * ------------------------------------------------------------------------ */
+function ouvrir(selecteur) {
+  $(selecteur).classList.add("ouverte");
+  $("#voile").classList.add("ouverte");
+  document.body.style.overflow = "hidden";
+}
+function fermerTout() {
+  document.querySelectorAll(".feuille").forEach(f => f.classList.remove("ouverte"));
+  $("#voile").classList.remove("ouverte");
+  document.body.style.overflow = "";
+}
+$("#voile").onclick = fermerTout;
+document.querySelectorAll("[data-fermer]").forEach(b => b.onclick = fermerTout);
+
+/* ---------------------------------------------------------------------------
+ * Construction de la feuille de filtres
+ * ------------------------------------------------------------------------ */
+function construireFiltres() {
+  const corps = $("#corps-filtres");
+  corps.innerHTML = "";
+  const bascules = document.createElement("div");
+  bascules.className = "groupe-filtre";
+
+  for (const f of FILTRES) {
+    if (f.type === "bascule") {
+      const l = document.createElement("label");
+      l.className = "bascule";
+      l.innerHTML = `<span>${f.libelle}</span>`;
+      const i = document.createElement("input");
+      i.type = "checkbox"; i.checked = valeurs[f.cle];
+      i.onchange = () => { valeurs[f.cle] = i.checked; rendre(); };
+      l.appendChild(i);
+      bascules.appendChild(l);
+      continue;
+    }
+
+    const g = document.createElement("div");
+    g.className = "groupe-filtre";
+    g.innerHTML = `<div class="titre-groupe">${f.libelle}</div>`;
+
+    if (f.type === "jetons") {
+      const zone = document.createElement("div");
+      zone.className = "jetons";
+      for (const [val, texte] of f.options) {
+        const b = document.createElement("button");
+        b.className = "jeton"; b.textContent = texte;
+        const estActif = () => f.multiple
+          ? valeurs[f.cle].includes(val) : valeurs[f.cle] === val;
+        b.setAttribute("aria-pressed", estActif());
+        b.onclick = () => {
+          if (f.multiple) {
+            const i = valeurs[f.cle].indexOf(val);
+            i === -1 ? valeurs[f.cle].push(val) : valeurs[f.cle].splice(i, 1);
+            zone.querySelectorAll(".jeton").forEach((el, k) =>
+              el.setAttribute("aria-pressed", valeurs[f.cle].includes(f.options[k][0])));
+          } else {
+            valeurs[f.cle] = val;
+            zone.querySelectorAll(".jeton").forEach((el, k) =>
+              el.setAttribute("aria-pressed", f.options[k][0] === val));
+          }
+          rendre();
+        };
+        zone.appendChild(b);
+      }
+      g.appendChild(zone);
+
+    } else if (f.type === "select") {
+      const s = document.createElement("select");
+      s.innerHTML = `<option value="">Toutes</option>` +
+        f.options(DONNEES.lots).map(o => `<option>${o}</option>`).join("");
+      s.value = valeurs[f.cle];
+      s.onchange = () => { valeurs[f.cle] = s.value; rendre(); };
+      g.appendChild(s);
+
+    } else if (f.type === "curseur") {
+      const zone = document.createElement("div");
+      zone.className = "curseur";
+      const i = document.createElement("input");
+      i.type = "range"; i.min = f.min; i.max = f.max; i.step = f.pas;
+      i.value = valeurs[f.cle];
+      const lecture = document.createElement("span");
+      lecture.className = "lecture";
+      lecture.textContent = f.format(valeurs[f.cle]);
+      i.oninput = () => {
+        valeurs[f.cle] = +i.value;
+        lecture.textContent = f.format(+i.value);
+        rendre();
+      };
+      zone.append(i, lecture);
+      g.appendChild(zone);
+    }
+    corps.appendChild(g);
+  }
+  corps.appendChild(bascules);
+}
+
+$("#ouvrir-filtres").onclick = () => { construireFiltres(); ouvrir("#feuille-filtres"); };
+$("#raz-filtres").onclick = () => { valeurs = valeursParDefaut(); construireFiltres(); rendre(); };
+
+/* ---------------------------------------------------------------------------
+ * Onglets, recherche, thème
+ * ------------------------------------------------------------------------ */
+document.querySelectorAll(".segments button").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll(".segments button")
+      .forEach(x => x.setAttribute("aria-selected", x === b));
+    onglet = b.dataset.onglet;
+    rendre();
+    scrollTo({ top: 0, behavior: "smooth" });
+  };
+});
+
+let minuteur;
+$("#recherche").oninput = e => {
+  clearTimeout(minuteur);
+  minuteur = setTimeout(() => { recherche = e.target.value; rendre(); }, 120);
+};
+
+const themeStocke = localStorage.getItem(CLE_THEME);
+if (themeStocke) document.documentElement.dataset.theme = themeStocke;
+$("#bascule-theme").onclick = () => {
+  const sombreActuel = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  const suivant = sombreActuel ? "light" : "dark";
+  document.documentElement.dataset.theme = suivant;
+  localStorage.setItem(CLE_THEME, suivant);
+};
+
+/* ---------------------------------------------------------------------------
+ * Chargement
+ * ------------------------------------------------------------------------ */
+async function charger() {
+  valeurs = valeursParDefaut();
+  try {
+    dejaVus = new Set(JSON.parse(localStorage.getItem(CLE_VUS) || "[]"));
+  } catch { dejaVus = new Set(); }
+
+  try {
+    // `cache: no-cache` revalide auprès du serveur : ouvrir l'app le matin
+    // suffit à récupérer la collecte de la nuit.
+    const reponse = await fetch("data/hybrides.json", { cache: "no-cache" });
+    if (!reponse.ok) throw new Error(reponse.status);
+    DONNEES = await reponse.json();
+  } catch (e) {
+    $("#liste").innerHTML = `<div class="vide"><div class="grand">📡</div>
+      Données indisponibles.<br>
+      <span style="font-size:13px">Vérifie ta connexion et rouvre l'app.</span></div>`;
+    return;
+  }
+
+  const m = DONNEES.meta;
+  const fiab = m.fiabilite && m.fiabilite.mesurable
+    ? ` · fiabilité ±${m.fiabilite.erreur_mediane_pct} %` : "";
+  $("#fraicheur").textContent =
+    `${m.nb_hybrides} hybrides · collecte du ${jourFr(m.genere_le)}${fiab}`;
+
+  rendre();
+
+  // Les lots à venir vus aujourd'hui ne seront plus « nouveaux » demain. La
+  // mémorisation attend quelques secondes : le temps de les avoir vraiment vus.
+  setTimeout(() => {
+    const ids = DONNEES.lots.filter(l => l.a_venir).map(l => l.id_lot);
+    localStorage.setItem(CLE_VUS, JSON.stringify([...new Set([...dejaVus, ...ids])]));
+  }, 4000);
+}
+
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+
+charger();
+</script>
+</body>
+</html>

@@ -1,20 +1,22 @@
 """Coût de revient d'un lot, au-delà du prix d'adjudication.
 
-Le prix marteau n'est qu'une partie de la dépense. S'y ajoutent, dans l'ordre
-d'importance observé sur les annonces :
+Le prix marteau n'est qu'une partie de la dépense. Les postes ci-dessous sont
+les tarifs réels de l'acheteur, qui part d'Île-de-France :
 
 * les **frais de vente** de la plateforme — 11 % du prix d'adjudication ;
-* les **frais de garde** du fourriériste, souvent transférés à l'acquéreur dès
-  le lendemain de la vente : jusqu'à 12 000 € sur un lot du corpus, avec une
-  médiane à 754 € quand un montant est chiffré, et parfois un tarif journalier ;
-* le **rapatriement**, qui dépend de la distance et de l'état : huit lots sur
-  dix imposent un enlèvement sur plateau, bien plus coûteux qu'un trajet par
-  la route ;
-* la **carte grise**, proportionnelle à la puissance fiscale.
+* le **plateau** pour sortir le véhicule du parc — 300 € de location, au-delà
+  de 200 km un supplément kilométrique ;
+* la **carte grise** — 150 € pour un hybride ;
+* les **frais de garde** du fourriériste : l'acheteur sait qu'il dépassera de
+  deux jours environ, soit 100 € quand l'annonce n'affiche pas de montant ;
+* le **déplacement** (train + repas) pour aller chercher le véhicule, de 20 €
+  en Île-de-France à 90 € à l'autre bout du pays.
 
-Les tarifs ci-dessous sont des ordres de grandeur, rassemblés en tête de
-fichier pour être ajustés facilement. Ce qui est lu dans l'annonce prime
-toujours sur l'estimation.
+Ce qui est lu dans l'annonce prime toujours sur le forfait : un montant de
+garde chiffré remplace l'hypothèse des deux jours.
+
+Tous les tarifs sont rassemblés en tête de fichier pour être ajustés d'une
+seule main quand les prix bougent.
 """
 from __future__ import annotations
 
@@ -23,24 +25,31 @@ import re
 # --- Paramètres ajustables --------------------------------------------------
 DEPART = "Île-de-France"          # d'où part l'acheteur
 
-# Coût kilométrique d'un rapatriement par la route (carburant, péage, et
-# acheminement de l'acheteur à l'aller).
+# Location d'un plateau pour sortir le véhicule du parc. Forfait négocié par
+# l'acheteur, valable pour un aller-retour de proximité ; au-delà, le loueur
+# facture la distance.
+PLATEAU_FORFAIT = 300.0
+PLATEAU_KM_INCLUS = 200
+PLATEAU_KM_SUPPLEMENT = 0.80
+
+# Retour par la route quand le véhicule roule et dispose de ses papiers :
+# carburant et péage seulement.
 COUT_KM_ROUTE = 0.30
-# Coût kilométrique d'un enlèvement sur plateau, aller-retour du dépanneur
-# compris, avec un plancher de déplacement.
-COUT_KM_PLATEAU = 1.60
-PLATEAU_MINIMUM = 250.0
 
-# Tarif du cheval fiscal en Île-de-France. À vérifier chaque année : il a
-# augmenté récemment et varie d'une région à l'autre.
+# Carte grise d'un hybride, forfait constaté par l'acheteur.
+CARTE_GRISE_HYBRIDE = 150.0
+# Repli pour les autres énergies, au cheval fiscal (tarif Île-de-France).
 TARIF_CHEVAL_FISCAL = 54.95
-# Les véhicules à énergie propre bénéficient encore d'un abattement dans
-# plusieurs régions ; mis à zéro, le calcul reste prudent.
-ABATTEMENT_ENERGIE_PROPRE = 0.0
 
-# Délai raisonnable entre l'adjudication et l'enlèvement, pour chiffrer une
-# garde facturée à la journée.
-JOURS_AVANT_ENLEVEMENT = 5
+# Garde du fourriériste. Quand l'annonce mentionne des frais sans les chiffrer,
+# l'acheteur table sur deux jours de dépassement.
+GARDE_DEPASSEMENT_FORFAIT = 100.0
+# Quand l'annonce affiche un tarif journalier, on chiffre ce même dépassement.
+JOURS_AVANT_ENLEVEMENT = 2
+
+# Déplacement de l'acheteur (train aller + repas), par tranche de distance.
+# Le premier palier couvre l'Île-de-France : transports locaux, pas de train.
+PALIERS_DEPLACEMENT = [(60, 20.0), (200, 45.0), (400, 70.0), (10_000, 90.0)]
 
 # Distances routières approximatives depuis Paris, par région (km).
 DISTANCES = {
@@ -63,9 +72,9 @@ DISTANCE_INCONNUE = 400            # à défaut, une distance médiane
 # --- Lecture des frais de garde dans l'annonce ------------------------------
 MONTANT_GARDE = re.compile(
     r"(?:frais\s+(?:de\s+)?(?:garde|gardiennage|enl[èe]vement)[^.]{0,80}?"
-    r"|s['’]?[ée]levant\s+[àa]\s*)([\d\s]{2,9}(?:[,.]\d{1,2})?)\s*€", re.I)
+    r"|s['’]?[ée]levant\s+[àa]\s*)([\d\s ]{2,9}(?:[,.]\d{1,2})?)\s*€", re.I)
 TARIF_JOURNALIER = re.compile(
-    r"([\d\s]{1,6}(?:[,.]\d{1,2})?)\s*€\s*(?:ttc\s*)?/\s*jour", re.I)
+    r"([\d\s ]{1,6}(?:[,.]\d{1,2})?)\s*€\s*(?:ttc\s*)?/\s*jour", re.I)
 MENTION_GARDE = re.compile(r"frais de (?:garde|gardiennage)|fourri[èe]riste", re.I)
 PLATEAU = re.compile(r"plateau", re.I)
 
@@ -77,12 +86,18 @@ def _nombre(brut: str) -> float | None:
         return None
 
 
+def distance_km(region: str | None) -> int:
+    """Distance routière approximative depuis le domicile de l'acheteur."""
+    return DISTANCES.get(region or "", DISTANCE_INCONNUE)
+
+
 def frais_garde(description: str | None) -> dict:
     """Frais de garde à prévoir, lus dans l'annonce.
 
-    Retourne le montant et la façon dont il a été obtenu. Quand l'annonce
-    signale des frais sans les chiffrer, le montant est ``None`` et
-    ``incertain`` vaut vrai : mieux vaut une alerte qu'un chiffre inventé.
+    Trois cas, du plus sûr au plus incertain : un montant est affiché, un tarif
+    journalier l'est, ou l'annonce se contente de mentionner des frais. Dans ce
+    dernier cas le forfait de dépassement s'applique, mais ``incertain`` reste
+    vrai : le total affiché n'est qu'un plancher.
     """
     texte = description or ""
     if not texte:
@@ -104,19 +119,28 @@ def frais_garde(description: str | None) -> dict:
                     "incertain": True}
 
     if MENTION_GARDE.search(texte):
-        return {"montant": None, "origine": "frais annoncés sans montant",
+        return {"montant": GARDE_DEPASSEMENT_FORFAIT,
+                "origine": "frais annoncés sans montant — 2 jours de dépassement",
                 "incertain": True}
     return {"montant": 0.0, "origine": "aucune mention", "incertain": False}
 
 
 def rapatriement(region: str | None, description: str | None,
-                 non_roulant: bool = False) -> dict:
-    """Coût d'acheminement du lot jusqu'au domicile de l'acheteur."""
-    distance = DISTANCES.get(region or "", DISTANCE_INCONNUE)
-    sur_plateau = bool(PLATEAU.search(description or "")) or non_roulant
+                 non_roulant: bool = False, sans_carte_grise: bool = False) -> dict:
+    """Coût d'acheminement du lot jusqu'au domicile de l'acheteur.
+
+    Le plateau s'impose dès que l'annonce l'exige, que le véhicule ne roule pas
+    ou qu'il lui manque ses papiers — sans carte grise, un retour par la route
+    n'est pas légal.
+    """
+    distance = distance_km(region)
+    sur_plateau = (bool(PLATEAU.search(description or ""))
+                   or non_roulant or sans_carte_grise)
 
     if sur_plateau:
-        montant = max(PLATEAU_MINIMUM, distance * COUT_KM_PLATEAU)
+        montant = PLATEAU_FORFAIT
+        if distance > PLATEAU_KM_INCLUS:
+            montant += (distance - PLATEAU_KM_INCLUS) * PLATEAU_KM_SUPPLEMENT
         mode = "plateau"
     else:
         montant = distance * COUT_KM_ROUTE
@@ -126,15 +150,24 @@ def rapatriement(region: str | None, description: str | None,
             "region_connue": region in DISTANCES}
 
 
-def carte_grise(puissance_fiscale: float | None, energie: str | None = None) -> dict:
-    """Coût du certificat d'immatriculation, à la puissance fiscale."""
-    if not puissance_fiscale:
-        return {"montant": None, "origine": "puissance fiscale inconnue"}
+def deplacement(region: str | None) -> dict:
+    """Aller de l'acheteur pour récupérer le véhicule : train et repas."""
+    distance = distance_km(region)
+    for limite, montant in PALIERS_DEPLACEMENT:
+        if distance <= limite:
+            return {"montant": montant, "distance_km": distance}
+    return {"montant": PALIERS_DEPLACEMENT[-1][1], "distance_km": distance}
 
+
+def carte_grise(puissance_fiscale: float | None, energie: str | None = None) -> dict:
+    """Coût du certificat d'immatriculation."""
+    hybride = bool(energie and re.search(r"hybride|électrique", energie, re.I))
+    if hybride:
+        return {"montant": CARTE_GRISE_HYBRIDE, "origine": "forfait hybride"}
+    if not puissance_fiscale:
+        return {"montant": CARTE_GRISE_HYBRIDE,
+                "origine": "puissance fiscale inconnue, forfait retenu"}
     montant = puissance_fiscale * TARIF_CHEVAL_FISCAL
-    propre = bool(energie and re.search(r"hybride|électrique|e85|gpl", energie, re.I))
-    if propre and ABATTEMENT_ENERGIE_PROPRE:
-        montant *= 1 - ABATTEMENT_ENERGIE_PROPRE
     return {"montant": round(montant),
             "origine": f"{puissance_fiscale:.0f} CV × {TARIF_CHEVAL_FISCAL:.2f} €"}
 
@@ -142,18 +175,21 @@ def carte_grise(puissance_fiscale: float | None, energie: str | None = None) -> 
 def cout_annexe(lot: dict) -> dict:
     """Somme des frais qui s'ajoutent au prix d'adjudication.
 
-    ``incertain`` signale qu'au moins un poste n'a pas pu être chiffré : le
-    total est alors un minimum, pas une prévision.
+    ``incertain`` signale que la garde repose sur une hypothèse plutôt que sur
+    un montant annoncé : le total est alors un plancher, pas une prévision.
     """
     description = lot.get("description")
     garde = frais_garde(description)
     transport = rapatriement(lot.get("region"), description,
-                             bool(lot.get("non_roulant")))
+                             bool(lot.get("non_roulant")),
+                             bool(lot.get("sans_carte_grise")))
+    trajet = deplacement(lot.get("region"))
     immatriculation = carte_grise(lot.get("puissance_fiscale"), lot.get("carburant"))
 
     postes = {
         "garde": garde["montant"],
         "rapatriement": transport["montant"],
+        "deplacement": trajet["montant"],
         "carte_grise": immatriculation["montant"],
     }
     connus = [v for v in postes.values() if v is not None]
@@ -164,6 +200,7 @@ def cout_annexe(lot: dict) -> dict:
         "postes": postes,
         "detail": {"garde": garde["origine"], "rapatriement": transport["mode"],
                    "distance_km": transport["distance_km"],
+                   "deplacement": f"train et repas, {trajet['distance_km']} km",
                    "carte_grise": immatriculation["origine"]},
         "incertain": bool(manquants) or garde["incertain"],
         "postes_non_chiffres": manquants,

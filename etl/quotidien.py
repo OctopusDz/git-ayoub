@@ -76,8 +76,7 @@ def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
     from scraper import config
     from scraper.parallele import collecter_parallele
     from etl.estimation import estimer
-    from etl.build_cube import construire as construire_cube
-    from etl.build_artifact import construire as construire_page
+    from etl.build_app import construire as construire_app
     from scraper.export import to_csv, to_json
 
     statuts = statuts or ["13", "14", "15"]
@@ -111,12 +110,12 @@ def mettre_a_jour(statuts: list[str] | None = None, fils: int = 8) -> dict:
     a_retenir = sorted([l for l in faits if interessant(l)],
                        key=lambda l: -(l.get("marge_pct") or 0))
 
-    # Le cube réunit historique et ventes ouvertes ; le portail montre les deux.
+    # L'application réunit historique et ventes ouvertes : les ventes closes
+    # servent de référence de prix, les ventes à venir portent la décision.
     ensemble = historique + faits
     to_json(ensemble, LOTS, meta={**rapport, "mode": "mise à jour quotidienne"})
     to_csv(ensemble, RACINE / "data" / "lots.csv")
-    construire_cube(LOTS, RACINE / "portal" / "data" / "dataset.json")
-    construire_page()
+    construire_app(LOTS)
 
     journal["lots_connus"] = sorted({l["id_lot"] for l in faits} | connus)
     journal["historique_des_jours"] = (journal.get("historique_des_jours") or [])[-59:] + [{
@@ -150,7 +149,7 @@ def resumer(bilan: dict) -> str:
             f"    mise à prix {lot['mise_a_prix']:.0f} € · "
             f"attendu {lot.get('estimation')} € · "
             f"enchère max {lot.get('prix_max_conseille')} € "
-            f"(soit {lot.get('cout_total_max')} € frais de vente compris) "
+            f"(soit {lot.get('cout_total_max')} € tout compris) "
             f"({lot.get('verdict')}, clôture {(lot.get('date_fin') or '')[:10]})\n"
             f"    {lot.get('url')}")
     return "\n".join(lignes)
