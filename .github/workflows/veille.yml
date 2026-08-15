@@ -104,6 +104,12 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # `enablement` crée le site Pages s'il n'existe pas encore : le dépôt
+      # n'a alors rien à régler à la main dans ses paramètres.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app
