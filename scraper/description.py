@@ -31,25 +31,58 @@ ENERGIES = [
 ]
 
 # --- Défauts et mentions d'état --------------------------------------------
+# Les descriptifs de fourrière mélangent trois choses que l'acheteur ne doit
+# surtout pas confondre :
+#
+# * des **mentions de série** — un véhicule de fourrière est sans clé et sans
+#   carte grise par défaut, la formule figure sur des milliers d'annonces
+#   identiques. Ce n'est pas un constat, et cela se chiffre en centaines
+#   d'euros, pas en milliers ;
+# * un **état non constaté** — « état de fonctionnement non connu » sur une
+#   annonce sur six : le dépositaire dit qu'il n'a pas regardé. C'est un
+#   risque, pas un défaut ;
+# * un **défaut réellement observé** — moteur bloqué, épave, accident.
+#
+# Les confondre pénalisait des lots parfaitement sains : « sans clé » suffisait
+# à classer un véhicule en « défaut bloquant ». Chaque catégorie est donc
+# désormais distincte, et le poids sur le prix est calibré sur l'écart mesuré à
+# véhicule comparable dans l'historique.
+
 # (motif, libellé, majeur ?) — « majeur » = affecte la remise en circulation.
 DEFAUTS = [
-    (r"sans cl[eé]f?\b|absence de cl[eé]", "Sans clé", True),
-    (r"sans certificat d.immatriculation|sans carte grise", "Sans carte grise", True),
     (r"\b[ée]pave\b|destruction obligatoire|pour pi[eè]ces", "Épave / pour pièces", True),
     (r"non roulant|ne d[ée]marre pas|moteur hs|moteur bloqu[eé]", "Non roulant", True),
     (r"v[ée]hicule accident[ée]|sinistr[ée]|vgc\b|v[ée]hicule gravement", "Accidenté", True),
     (r"bo[iî]te.{0,15}hs|embrayage hs|transmission hs", "Transmission HS", True),
     (r"pneumatiques? hs|pneus? hs", "Pneumatiques HS", False),
     (r"batterie hs", "Batterie HS", False),
-    (r"\bchocs?\b|\bcoups?\b|enfonc", "Chocs / carrosserie", False),
-    (r"rayures?|frottements?|ray[ée]", "Rayures d'usage", False),
     (r"vitrage.{0,20}(fissur|d[ée]color)|pare-brise fissur", "Vitrage à revoir", False),
     (r"corrosion|rouille", "Corrosion", False),
     (r"fuite", "Fuite signalée", False),
     (r"distribution [àa] pr[ée]voir|imp[ée]ratif distribution", "Distribution à prévoir", False),
-    (r"r[ée]vision compl[eè]te [àa] pr[ée]voir", "Révision complète à prévoir", False),
     (r"embrayage (?:dur|ferme|[àa] revoir)", "Embrayage à revoir", False),
+    # Les chocs ne comptent que hors de la formule d'usage, traitée plus bas.
+    (r"enfonc|\bcabossé|carrosserie endommag", "Carrosserie endommagée", False),
 ]
+
+# Mentions de série : l'état normal d'un lot de fourrière. Informatives, avec
+# leur coût réel, mesuré à véhicule comparable sur l'historique des ventes.
+MENTIONS_SERIE = [
+    (r"sans cl[eé]f?\b|absence de cl[eé]", "Sans clé", 300),
+    (r"sans certificat d.immatriculation|absence de certificat d.immatriculation"
+     r"|sans carte grise", "Sans carte grise", 150),
+]
+
+# Le dépositaire déclare ne pas savoir. Ce n'est pas un défaut : c'est une
+# inconnue, qui appelle une visite plutôt qu'une décote automatique.
+ETAT_NON_CONSTATE = re.compile(
+    r"[ée]tat (?:de fonctionnement|m[ée]canique|g[ée]n[ée]ral) non connu"
+    r"|[ée]tat non connu|fonctionnement non (?:connu|v[ée]rifi[ée])", re.I)
+
+# Formule type décrivant l'usure ordinaire — à ne pas lire comme un accident.
+USURE_ORDINAIRE = re.compile(
+    r"(?:coups?|chocs?|rayures?|frottements?)[^.]{0,60}d.usage"
+    r"|rayures? et frottements?", re.I)
 
 MOTIFS = {
     "immatriculation": re.compile(
@@ -158,7 +191,7 @@ def extraire_energie(texte: str) -> str | None:
 
 
 def extraire_defauts(texte: str) -> tuple[list[str], int]:
-    """Liste des défauts signalés et nombre de défauts majeurs."""
+    """Liste des défauts réellement signalés et nombre de défauts majeurs."""
     plat = sans_accents(texte).lower()
     trouves, majeurs = [], 0
     for motif, libelle, est_majeur in DEFAUTS:
@@ -166,7 +199,23 @@ def extraire_defauts(texte: str) -> tuple[list[str], int]:
             trouves.append(libelle)
             if est_majeur:
                 majeurs += 1
+
+    # Un choc mentionné hors de la formule d'usage est un vrai constat.
+    if re.search(r"\bchocs?\b|\bcoups?\b", plat) and not USURE_ORDINAIRE.search(texte):
+        if "Carrosserie endommagée" not in trouves:
+            trouves.append("Carrosserie endommagée")
     return trouves, majeurs
+
+
+def extraire_mentions(texte: str) -> tuple[list[str], int]:
+    """Mentions de série d'un lot de fourrière, et leur coût cumulé en euros."""
+    plat = sans_accents(texte).lower()
+    mentions, cout = [], 0
+    for motif, libelle, prix in MENTIONS_SERIE:
+        if re.search(sans_accents(motif), plat):
+            mentions.append(libelle)
+            cout += prix
+    return mentions, cout
 
 
 def analyser(short_description_html: str | None,
@@ -219,19 +268,29 @@ def analyser(short_description_html: str | None,
     infos["date_entree_parc"] = _date_iso(parc.group(1)) if parc else None
 
     defauts, majeurs = extraire_defauts(complet)
+    mentions, cout_mentions = extraire_mentions(complet)
     infos["defauts"] = defauts
     infos["nb_defauts"] = len(defauts)
     infos["nb_defauts_majeurs"] = majeurs
-    infos["sans_cle"] = "Sans clé" in defauts
-    infos["sans_carte_grise"] = "Sans carte grise" in defauts
+    infos["mentions_fourriere"] = mentions
+    infos["cout_mentions"] = cout_mentions
+    infos["sans_cle"] = "Sans clé" in mentions
+    infos["sans_carte_grise"] = "Sans carte grise" in mentions
     infos["non_roulant"] = "Non roulant" in defauts or "Épave / pour pièces" in defauts
+    infos["etat_non_constate"] = bool(ETAT_NON_CONSTATE.search(complet))
+    infos["usure_ordinaire"] = bool(USURE_ORDINAIRE.search(complet))
 
+    # La gravité ne retient que ce qui a été réellement observé. Un lot dont
+    # l'état n'a pas été vérifié n'est pas sain pour autant : il est marqué
+    # comme tel, pour appeler une visite plutôt qu'une confiance aveugle.
     if majeurs >= 2:
         infos["gravite"] = "Défauts majeurs"
     elif majeurs == 1:
         infos["gravite"] = "Défaut bloquant isolé"
     elif defauts:
         infos["gravite"] = "Défauts d'usage"
+    elif infos["etat_non_constate"]:
+        infos["gravite"] = "État non constaté"
     else:
         infos["gravite"] = "Aucun défaut signalé"
 

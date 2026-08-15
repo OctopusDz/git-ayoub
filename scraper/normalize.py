@@ -143,6 +143,12 @@ def normalize_lot(brut: dict, categorie_id: int, date_collecte: str) -> dict:
         "defauts": infos.get("defauts") or [],
         "nb_defauts": infos.get("nb_defauts"),
         "nb_defauts_majeurs": infos.get("nb_defauts_majeurs"),
+        # Mentions de série d'une fourrière : informatives, chiffrées, à ne pas
+        # confondre avec un défaut constaté.
+        "mentions_fourriere": infos.get("mentions_fourriere") or [],
+        "cout_mentions": infos.get("cout_mentions"),
+        "etat_non_constate": infos.get("etat_non_constate"),
+        "usure_ordinaire": infos.get("usure_ordinaire"),
         "sans_cle": infos.get("sans_cle"),
         "sans_carte_grise": infos.get("sans_carte_grise"),
         "non_roulant": infos.get("non_roulant"),
@@ -261,6 +267,7 @@ CHAMPS_EXPORT = [
     "nb_places", "nb_portes", "nb_cles", "immatriculation", "vin", "type_mines",
     "hybride", "base_hybride", "rechargeable", "indice_energie", "annee_douteuse",
     "gravite", "nb_defauts", "nb_defauts_majeurs", "sans_cle", "sans_carte_grise",
+    "etat_non_constate", "usure_ordinaire", "cout_mentions", "mentions_fourriere",
     "non_roulant", "premiere_main", "controle_technique_mentionne",
     "distribution_faite", "revision_recente", "defauts",
     "ville", "code_postal", "code_departement", "departement", "region", "metropole",

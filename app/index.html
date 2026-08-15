@@ -507,7 +507,8 @@ const FILTRES = [
   },
   {
     cle: "etat", type: "jetons", libelle: "État signalé", multiple: true,
-    options: [["Aucun défaut signalé", "Aucun défaut"], ["Défauts d'usage", "Usage"],
+    options: [["Aucun défaut signalé", "Aucun défaut"],
+              ["État non constaté", "Non constaté"], ["Défauts d'usage", "Usage"],
               ["Défaut bloquant isolé", "Bloquant isolé"], ["Défauts majeurs", "Majeurs"]],
     defaut: [],
     actif: v => v.length > 0,
@@ -693,10 +694,14 @@ function etiquettesLot(l) {
   const e = [];
   if (l.gravite === "Aucun défaut signalé") e.push(["bien", "Aucun défaut"]);
   else if (l.gravite === "Défauts majeurs") e.push(["grave", "Défauts majeurs"]);
+  else if (l.gravite === "État non constaté") e.push(["", "État non vérifié"]);
   else if (l.gravite) e.push(["alerte", l.gravite]);
   if (l.non_roulant) e.push(["grave", "Ne roule pas"]);
-  if (l.sans_cle) e.push(["alerte", "Sans clé"]);
-  if (l.sans_carte_grise) e.push(["alerte", "Sans carte grise"]);
+  // Sans clé et sans carte grise sont l'ordinaire d'une fourrière, pas des
+  // avaries : on les annonce avec leur coût plutôt qu'en rouge.
+  if (l.sans_cle) e.push(["", "Sans clé · ~300 €"]);
+  if (l.sans_carte_grise) e.push(["", "Sans CG · ~150 €"]);
+  if (l.usure_ordinaire) e.push(["", "Usure d'usage"]);
   if (l.rechargeable) e.push(["", "Rechargeable"]);
   if (l.hybride_diesel) e.push(["grave", "Hybride diesel"]);
   if (l.base_incertaine) e.push(["alerte", "Base à vérifier"]);
