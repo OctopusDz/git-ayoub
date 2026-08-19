@@ -26,6 +26,12 @@ RACINE = Path(__file__).resolve().parent.parent
 # dans les descriptifs eux-mêmes (« frais de vente (11%) »).
 TAUX_FRAIS = 0.11
 
+# Marge visée sous le prix attendu. Mesurée sur les ventes passées : à 10 %
+# on remporte environ une enchère sur onze, à 23 % (l'ancien réglage) une sur
+# cinquante. C'est un choix d'acheteur, pas un paramètre technique — d'où sa
+# place ici, seul et nommé.
+MARGE_VISEE = 0.10
+
 # Effectif minimal pour qu'une médiane de comparables ait un sens.
 MIN_COMPARABLES = 5
 # Effectif à partir duquel on juge l'estimation solide.
@@ -166,7 +172,9 @@ def estimer(lot: dict, historique: list[dict]) -> dict:
         resultat.update(estimation=None, cout_si_prix_attendu=None,
                         fourchette_basse=None, fourchette_haute=None,
                         prix_max_conseille=None, cout_total_max=None,
-                        taux_frais_pct=round(TAUX_FRAIS * 100), confiance="aucune",
+                        taux_frais_pct=round(TAUX_FRAIS * 100),
+                        marge_visee_pct=round(MARGE_VISEE * 100),
+                        confiance="aucune",
                         verdict="Pas de référence", marge_pct=None)
         return resultat
 
@@ -200,21 +208,17 @@ def estimer(lot: dict, historique: list[dict]) -> dict:
     else:
         confiance = "faible"
 
-    # Prix maximum conseillé : la borne basse de la fourchette, minorée d'une
-    # réserve d'autant plus large que l'estimation est incertaine. Enchérir
-    # au-delà, c'est payer le prix du marché sans marge de manœuvre.
-    reserve = {"bonne": 0.10, "moyenne": 0.18, "faible": 0.28}[confiance]
-    defauts_majeurs = lot.get("nb_defauts_majeurs") or 0
-    reserve += min(0.15, 0.05 * defauts_majeurs)     # remise en état à prévoir
-
-    # Budget que l'opération doit respecter, tout compris.
-    budget_max = basse * (1 - reserve)
-
-    # Les frais annexes se paient quel que soit le prix marteau : garde du
-    # fourriériste, rapatriement, carte grise. Ils viennent en déduction du
-    # budget avant que l'enchère ne soit calculée.
+    # Prix maximum conseillé : le prix attendu, moins la marge voulue, moins
+    # les frais. Une seule décote, explicite et choisie.
+    #
+    # La version précédente en empilait quatre — quartile bas, réserve selon la
+    # confiance, frais annexes, frais de vente — qui se multipliaient. La marge
+    # effective sortait entre 20 et 40 % selon le lot, sans que personne ne
+    # l'ait décidée, et seules 2 % des ventes passées seraient tombées sous ce
+    # plafond. Un conseil qu'on ne peut jamais suivre n'est pas un conseil.
     from etl.couts import cout_annexe
     annexes = cout_annexe(lot)
+    budget_max = estimation * (1 - MARGE_VISEE)
     budget_enchere = budget_max - annexes["total"]
 
     # L'enchère elle-même doit tenir dans ce solde une fois les frais de vente
@@ -242,6 +246,7 @@ def estimer(lot: dict, historique: list[dict]) -> dict:
         prix_max_conseille=round(prix_max),
         cout_total_max=round(prix_max * (1 + TAUX_FRAIS) + annexes["total"]),
         taux_frais_pct=round(TAUX_FRAIS * 100),
+        marge_visee_pct=round(MARGE_VISEE * 100),
         frais_annexes=annexes["total"],
         frais_garde=annexes["postes"]["garde"],
         frais_rapatriement=annexes["postes"]["rapatriement"],
