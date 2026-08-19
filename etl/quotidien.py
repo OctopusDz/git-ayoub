@@ -234,7 +234,10 @@ def _ecrire_alerte(lots: list[dict]) -> Path | None:
                        "affiché est un plancher.", ""]
 
     lignes += ["---", "", "https://octopusdz.github.io/git-ayoub/"]
-    ALERTE.write_text("\n".join(lignes), encoding="utf-8")
+    # Le saut de ligne final est indispensable : sans lui, le marqueur de
+    # fin du bloc multiligne de GitHub Actions se colle à la dernière ligne
+    # et l'étape échoue.
+    ALERTE.write_text("\n".join(lignes) + "\n", encoding="utf-8")
     return ALERTE
 
 

@@ -114,13 +114,16 @@ jobs:
       # aux critères — pas de fichier, pas de mail.
       - name: Alerte nouvel hybride
         id: alerte
+        continue-on-error: true
         run: |
           if [ -f data/alerte.md ]; then
             echo "nouveaute=oui" >> "$GITHUB_OUTPUT"
             {
-              echo 'corps<<FIN'
-              cat data/alerte.md
-              echo FIN
+              echo 'corps<<FIN_ALERTE_VEILLE'
+              # printf garantit le saut de ligne final : sans lui le marqueur
+              # de fin se colle à la dernière ligne et l'étape échoue.
+              printf '%s\n' "$(cat data/alerte.md)"
+              echo 'FIN_ALERTE_VEILLE'
             } >> "$GITHUB_OUTPUT"
             echo "::notice title=Nouvel hybride::$(head -1 data/alerte.md)"
           else
@@ -132,6 +135,7 @@ jobs:
       # ni service tiers.
       - name: Prévenir par issue (donc par mail)
         if: steps.alerte.outputs.nouveaute == 'oui'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CORPS: ${{ steps.alerte.outputs.corps }}
