@@ -824,6 +824,13 @@
    "nouveaux_lots": 1,
    "closes_ajoutees": 0,
    "a_retenir": 5
+  },
+  {
+   "jour": "2026-08-22",
+   "ventes_ouvertes": 548,
+   "nouveaux_lots": 0,
+   "closes_ajoutees": 0,
+   "a_retenir": 5
   }
  ],
  "lots_ouverts": [
