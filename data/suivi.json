@@ -891,6 +891,13 @@
    "nouveaux_lots": 0,
    "closes_ajoutees": 0,
    "a_retenir": 5
+  },
+  {
+   "jour": "2026-08-26",
+   "ventes_ouvertes": 555,
+   "nouveaux_lots": 0,
+   "closes_ajoutees": 0,
+   "a_retenir": 5
   }
  ],
  "lots_ouverts": [
@@ -1051,7 +1058,6 @@
   291442,
   291516,
   291540,
-  291657,
   291932,
   292346,
   292753,
