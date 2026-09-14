@@ -926,6 +926,7 @@
   315676,
   315711,
   315756,
+  315787,
   315790,
   315804,
   315839,
@@ -1684,13 +1685,6 @@
  "historique_des_jours": [
   {
    "jour": "2026-08-17",
-   "ventes_ouvertes": 311,
-   "nouveaux_lots": 0,
-   "closes_ajoutees": 0,
-   "a_retenir": 1
-  },
-  {
-   "jour": "2026-08-17",
    "ventes_ouvertes": 312,
    "nouveaux_lots": 1,
    "closes_ajoutees": 0,
@@ -2101,6 +2095,13 @@
    "nouveaux_lots": 0,
    "closes_ajoutees": 0,
    "a_retenir": 8
+  },
+  {
+   "jour": "2026-09-14",
+   "ventes_ouvertes": 673,
+   "nouveaux_lots": 1,
+   "closes_ajoutees": 0,
+   "a_retenir": 8
   }
  ],
  "lots_ouverts": [
@@ -2454,6 +2455,7 @@
   315464,
   315529,
   315711,
+  315787,
   315790,
   316004,
   316282,
