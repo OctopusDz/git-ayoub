@@ -2066,13 +2066,6 @@
    "ventes_ouvertes": 532,
    "nouveaux_lots": 0,
    "closes_ajoutees": 0,
-   "a_retenir": 5
-  },
-  {
-   "jour": "2026-08-19",
-   "ventes_ouvertes": 532,
-   "nouveaux_lots": 0,
-   "closes_ajoutees": 0,
    "a_retenir": 6
   },
   {
@@ -2480,6 +2473,13 @@
    "nouveaux_lots": 0,
    "closes_ajoutees": 210,
    "a_retenir": 29
+  },
+  {
+   "jour": "2026-09-15",
+   "ventes_ouvertes": 693,
+   "nouveaux_lots": 0,
+   "closes_ajoutees": 0,
+   "a_retenir": 29
   }
  ],
  "lots_ouverts": [
@@ -2704,7 +2704,6 @@
   305455,
   305626,
   305755,
-  305766,
   305792,
   305812,
   305823,
@@ -3080,7 +3079,6 @@
   340153,
   340180,
   340544,
-  340556,
   340560,
   340567,
   340570,
