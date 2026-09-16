@@ -2062,13 +2062,6 @@
  ],
  "historique_des_jours": [
   {
-   "jour": "2026-08-19",
-   "ventes_ouvertes": 532,
-   "nouveaux_lots": 0,
-   "closes_ajoutees": 0,
-   "a_retenir": 6
-  },
-  {
    "jour": "2026-08-20",
    "ventes_ouvertes": 532,
    "nouveaux_lots": 0,
@@ -2477,6 +2470,13 @@
   {
    "jour": "2026-09-16",
    "ventes_ouvertes": 693,
+   "nouveaux_lots": 0,
+   "closes_ajoutees": 0,
+   "a_retenir": 29
+  },
+  {
+   "jour": "2026-09-16",
+   "ventes_ouvertes": 691,
    "nouveaux_lots": 0,
    "closes_ajoutees": 0,
    "a_retenir": 29
@@ -2938,7 +2938,6 @@
   327019,
   327347,
   327582,
-  327587,
   327589,
   327656,
   327665,
@@ -2992,7 +2991,6 @@
   328857,
   328860,
   328869,
-  328872,
   328873,
   328954,
   329236,
