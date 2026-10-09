@@ -2753,16 +2753,11 @@
   367005,
   368568,
   369759,
+  370446,
+  370449,
   370461
  ],
  "historique_des_jours": [
-  {
-   "jour": "2026-09-11",
-   "ventes_ouvertes": 497,
-   "nouveaux_lots": 0,
-   "closes_ajoutees": 111,
-   "a_retenir": 4
-  },
   {
    "jour": "2026-09-11",
    "ventes_ouvertes": 600,
@@ -3173,6 +3168,13 @@
    "jour": "2026-10-08",
    "ventes_ouvertes": 528,
    "nouveaux_lots": 59,
+   "closes_ajoutees": 0,
+   "a_retenir": 8
+  },
+  {
+   "jour": "2026-10-09",
+   "ventes_ouvertes": 530,
+   "nouveaux_lots": 2,
    "closes_ajoutees": 0,
    "a_retenir": 8
   }
@@ -3705,6 +3707,8 @@
   367005,
   368568,
   369759,
+  370446,
+  370449,
   370461
  ]
 }
