@@ -3794,13 +3794,6 @@
   },
   {
    "jour": "2026-09-28",
-   "ventes_ouvertes": 204,
-   "nouveaux_lots": 0,
-   "closes_ajoutees": 0,
-   "a_retenir": 8
-  },
-  {
-   "jour": "2026-09-28",
    "ventes_ouvertes": 300,
    "nouveaux_lots": 125,
    "closes_ajoutees": 0,
@@ -4203,6 +4196,13 @@
    "ventes_ouvertes": 665,
    "nouveaux_lots": 172,
    "closes_ajoutees": 63,
+   "a_retenir": 40
+  },
+  {
+   "jour": "2026-10-28",
+   "ventes_ouvertes": 665,
+   "nouveaux_lots": 0,
+   "closes_ajoutees": 0,
    "a_retenir": 40
   }
  ],
