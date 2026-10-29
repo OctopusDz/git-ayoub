@@ -3528,6 +3528,7 @@
   367494,
   367533,
   367544,
+  367744,
   367762,
   367824,
   367853,
@@ -3785,13 +3786,6 @@
   380613
  ],
  "historique_des_jours": [
-  {
-   "jour": "2026-09-28",
-   "ventes_ouvertes": 300,
-   "nouveaux_lots": 125,
-   "closes_ajoutees": 0,
-   "a_retenir": 10
-  },
   {
    "jour": "2026-09-29",
    "ventes_ouvertes": 329,
@@ -4202,6 +4196,13 @@
    "jour": "2026-10-28",
    "ventes_ouvertes": 662,
    "nouveaux_lots": 0,
+   "closes_ajoutees": 0,
+   "a_retenir": 40
+  },
+  {
+   "jour": "2026-10-29",
+   "ventes_ouvertes": 664,
+   "nouveaux_lots": 1,
    "closes_ajoutees": 0,
    "a_retenir": 40
   }
@@ -4660,6 +4661,7 @@
   367494,
   367533,
   367544,
+  367744,
   367762,
   367824,
   367853,
@@ -4741,6 +4743,7 @@
   369579,
   369588,
   369592,
+  369598,
   369602,
   369604,
   369619,
