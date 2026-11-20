@@ -4294,6 +4294,7 @@
   392040,
   392320,
   392961,
+  393003,
   393827,
   393834,
   393835,
@@ -4318,13 +4319,6 @@
   397494
  ],
  "historique_des_jours": [
-  {
-   "jour": "2026-10-20",
-   "ventes_ouvertes": 607,
-   "nouveaux_lots": 0,
-   "closes_ajoutees": 55,
-   "a_retenir": 17
-  },
   {
    "jour": "2026-10-21",
    "ventes_ouvertes": 607,
@@ -4737,6 +4731,13 @@
    "nouveaux_lots": 177,
    "closes_ajoutees": 0,
    "a_retenir": 5
+  },
+  {
+   "jour": "2026-11-20",
+   "ventes_ouvertes": 419,
+   "nouveaux_lots": 1,
+   "closes_ajoutees": 0,
+   "a_retenir": 5
   }
  ],
  "lots_ouverts": [
@@ -5136,6 +5137,7 @@
   392040,
   392320,
   392961,
+  393003,
   393827,
   393834,
   393835,
