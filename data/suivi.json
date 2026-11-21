@@ -4344,13 +4344,6 @@
  "historique_des_jours": [
   {
    "jour": "2026-10-22",
-   "ventes_ouvertes": 607,
-   "nouveaux_lots": 0,
-   "closes_ajoutees": 0,
-   "a_retenir": 17
-  },
-  {
-   "jour": "2026-10-22",
    "ventes_ouvertes": 407,
    "nouveaux_lots": 0,
    "closes_ajoutees": 200,
@@ -4760,6 +4753,13 @@
    "ventes_ouvertes": 399,
    "nouveaux_lots": 23,
    "closes_ajoutees": 22,
+   "a_retenir": 5
+  },
+  {
+   "jour": "2026-11-21",
+   "ventes_ouvertes": 399,
+   "nouveaux_lots": 0,
+   "closes_ajoutees": 0,
    "a_retenir": 5
   }
  ],
